@@ -69,16 +69,18 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
     let hraw = HRAWINPUT(lparam.0 as *mut core::ffi::c_void);
     let header_size = size_of::<windows::Win32::UI::Input::RAWINPUTHEADER>() as u32;
 
-    // Drain every queued raw input packet (keyboard events can be coalesced).
-    for _ in 0..8 {
-        let mut size: u32 = 0;
-        let got = unsafe {
-            GetRawInputData(hraw, RID_INPUT, None, &mut size, header_size)
-        };
-        if got == 0 || size == 0 || size > 8192 {
-            break;
+    // One WM_INPUT carries exactly one RAWINPUT packet (Microsoft docs).
+    // The buffer is thread-local and reused so a keystroke never allocates
+    // (capacity is reserved on the first packet, then kept).
+    thread_local! {
+        static BUF: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    BUF.with_borrow_mut(|buf| {
+        if buf.capacity() < RAW_BUF_SIZE {
+            buf.reserve(RAW_BUF_SIZE);
         }
-        let mut buf = vec![0u8; size as usize];
+        let mut size: u32 = RAW_BUF_SIZE as u32;
         let written = unsafe {
             GetRawInputData(
                 hraw,
@@ -88,18 +90,20 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
                 header_size,
             )
         };
-        if written == 0 {
-            break;
+        if written == u32::MAX || written == 0 {
+            // -1 = error; 0 should not happen for a valid WM_INPUT, ignore
+            // both (e.g. a mouse packet we never asked for).
+            return;
         }
         let input = unsafe { &*(buf.as_ptr() as *const RAWINPUT) };
         if input.header.dwType != RIM_TYPEKEYBOARD.0 {
-            continue;
+            return;
         }
         let keyboard = unsafe { &input.data.keyboard };
         let vk = keyboard.VKey;
         // 0xFF means "no virtual key" (e.g. pure modifier up events).
         if vk == 0xFF {
-            continue;
+            return;
         }
         let is_break = keyboard.Flags & RI_KEY_BREAK as u16 != 0;
         let key = name_for_vk(vk);
@@ -112,7 +116,7 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
         let Some(device_id) = device_id else {
             // Device not in cache yet (arrival event raced) - refresh once.
             refresh_devices(ctx);
-            continue;
+            return;
         };
 
         let _ = ctx.tx.send(EngineMsg::KeyEvent {
@@ -120,8 +124,12 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
             key,
             down: !is_break,
         });
-    }
+    });
 }
+
+/// A RAWINPUTKEYBOARD packet is a few dozen bytes; 1 KiB is a generous,
+/// stack-free upper bound for any keyboard raw input blob.
+const RAW_BUF_SIZE: usize = 1024;
 
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
