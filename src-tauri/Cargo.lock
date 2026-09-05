@@ -74,6 +74,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "tokio",
  "vigem-client",
  "windows 0.62.2",
 ]
