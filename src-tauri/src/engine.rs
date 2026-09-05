@@ -19,6 +19,7 @@ use crate::core::{
     PlayerInfo, SavedConfig, SavedPlayer, Snapshot,
 };
 use crate::mapping::{default_bindings, report_for};
+use crate::presets::{self, PresetMeta};
 
 const MAX_PLAYERS: usize = 4;
 const DEFAULT_PROFILE: &str = "Default";
@@ -48,6 +49,10 @@ pub enum EngineMsg {
     LoadProfile { name: String, reply: Reply<Snapshot> },
     DeleteProfile { name: String, reply: Reply<()> },
     ListProfiles(Reply<Vec<String>>),
+    /// Apply a built-in starter layout to one player (replaces its mapping).
+    ApplyPreset { player: usize, preset_id: String, reply: Reply<Snapshot> },
+    /// List built-in presets (id/name/description).
+    ListPresets(Reply<Vec<PresetMeta>>),
     /// A key was pressed/released on one physical keyboard.
     KeyEvent { device: String, key: String, down: bool },
     /// Device list changed (startup, plug/unplug).
@@ -202,6 +207,23 @@ impl Core {
                 last_report: None,
             })
             .collect();
+        // A keyboard can only feed one player: profiles that (for whatever
+        // reason) assign the same device twice get the later duplicates dropped.
+        let mut seen_keyboards: HashSet<String> = HashSet::new();
+        let duplicate_indices: Vec<usize> = self
+            .players
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                let id = p.keyboard.as_ref()?;
+                if seen_keyboards.insert(id.clone()) { None } else { Some(i) }
+            })
+            .collect();
+        for i in duplicate_indices {
+            log::warn!("Profile assigns a keyboard to multiple players - unassigning #{i}");
+            self.players[i].keyboard = None;
+            self.players[i].held.clear();
+        }
         while self.players.len() < 2 {
             self.players.push(PlayerRuntime::new(self.players.len()));
         }
@@ -589,6 +611,22 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                 names.sort();
                 let _ = reply.send(Ok(names));
             }
+            EngineMsg::ApplyPreset { player, preset_id, reply } => {
+                let Some(bindings) = presets::bindings(&preset_id) else {
+                    let _ = reply.send(Err(format!("Unknown preset '{preset_id}'")));
+                    continue;
+                };
+                if let Some(p) = core.players.get_mut(player) {
+                    p.bindings = bindings;
+                    p.held.clear();
+                    p.last_report = None;
+                    changed = true;
+                }
+                let _ = reply.send(Ok(core.snapshot()));
+            }
+            EngineMsg::ListPresets(reply) => {
+                let _ = reply.send(Ok(presets::list()));
+            }
             EngineMsg::KeyEvent { device, key, down } => {
                 handle_key_event(&app, &mut core, &device, &key, down);
             }
@@ -647,14 +685,14 @@ fn handle_key_event(app: &AppHandle, core: &mut Core, device: &str, key: &str, d
         .map(|d| d.name.clone())
         .unwrap_or_else(|| "Keyboard".to_string());
 
-    // Always surface key events to the UI so the mapping editor can capture
-    // keys even while the engine is paused.
-    let _ = app.emit(
-        "kb:event",
-        KeyEventDto { device: device.to_string(), device_name, key: key.to_string(), down },
-    );
-
+    // Key events only reach the UI while the engine is paused - that is when
+    // the mapping editor captures keys. During gameplay the events are routed
+    // straight to the controllers with no per-key IPC overhead.
     if !core.running {
+        let _ = app.emit(
+            "kb:event",
+            KeyEventDto { device: device.to_string(), device_name, key: key.to_string(), down },
+        );
         return;
     }
 
@@ -682,14 +720,21 @@ fn handle_key_event(app: &AppHandle, core: &mut Core, device: &str, key: &str, d
 
     match submit {
         Ok(()) => {
-            p.controller_error = None;
+            if p.controller_error.is_some() {
+                p.controller_error = None;
+                // Notify once when the controller recovers.
+                let _ = app.emit("engine:changed", ());
+            }
             p.last_report = Some(report);
         }
         Err(e) => {
-            p.controller_error = Some(e);
+            // Only surface a state change once - repeated errors on every
+            // keystroke must not spam the UI with events.
+            if p.controller_error.as_deref() != Some(e.as_str()) {
+                p.controller_error = Some(e);
+                let _ = app.emit("engine:changed", ());
+            }
             p.last_report = None;
-            // Emit so the UI can offer a reconnect.
-            let _ = app.emit("engine:changed", ());
         }
     }
 }

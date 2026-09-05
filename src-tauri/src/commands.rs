@@ -8,6 +8,7 @@ use tauri::State;
 
 use crate::core::{Binding, DriverStatus, Snapshot};
 use crate::engine::{EngineMsg, Reply};
+use crate::presets::PresetMeta;
 use crate::state::EngineHandle;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
@@ -119,6 +120,22 @@ pub fn reconnect_controllers(
     engine: State<'_, EngineHandle>,
 ) -> Result<Snapshot, String> {
     ask(&engine, EngineMsg::ReconnectControllers)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn list_presets(
+    engine: State<'_, EngineHandle>,
+) -> Result<Vec<PresetMeta>, String> {
+    ask(&engine, EngineMsg::ListPresets)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn apply_preset(
+    engine: State<'_, EngineHandle>,
+    player: usize,
+    preset_id: String,
+) -> Result<Snapshot, String> {
+    ask(&engine, |reply| EngineMsg::ApplyPreset { player, preset_id, reply })
 }
 
 #[tauri::command(rename_all = "camelCase")]

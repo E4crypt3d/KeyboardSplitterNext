@@ -1,60 +1,15 @@
 //! Mapping engine: turns "held physical keys of one player" into a single
 //! controller report. Pure and platform independent (unit tested).
+//!
+//! Starter layouts ("presets") for new players and for popular games live in
+//! `crate::presets`; `default_bindings` is simply the "general" preset.
 
 use std::collections::HashSet;
 
 use crate::controller::{Accumulator, GamepadReport, accumulate, finish};
-use crate::core::{
-    Binding, DpadDirection, GamepadButton, StickDirection, StickSide, Target, TriggerSide,
-};
+use crate::core::Binding;
 
-fn button(button: GamepadButton) -> Target {
-    Target::Button { button }
-}
-fn dpad(direction: DpadDirection) -> Target {
-    Target::Dpad { direction }
-}
-fn trigger(side: TriggerSide) -> Target {
-    Target::Trigger { side }
-}
-fn stick(side: StickSide, direction: StickDirection) -> Target {
-    Target::Stick { side, direction }
-}
-
-/// Sensible starter layout for a player who owns their own keyboard.
-/// Movement on the left stick (WASD) + aim on the right stick (arrows) is the
-/// most common split-screen control scheme; the rest covers face buttons,
-/// bumpers/triggers, D-pad and Start/Back. Every player slot starts with this
-/// layout and the mapping editor can change individual keys.
-pub fn default_bindings() -> Vec<Binding> {
-    fn b(key: &str, target: Target) -> Binding {
-        Binding { key: key.to_string(), target }
-    }
-    vec![
-        b("W", stick(StickSide::Left, StickDirection::Up)),
-        b("A", stick(StickSide::Left, StickDirection::Left)),
-        b("S", stick(StickSide::Left, StickDirection::Down)),
-        b("D", stick(StickSide::Left, StickDirection::Right)),
-        b("Up", stick(StickSide::Right, StickDirection::Up)),
-        b("Left", stick(StickSide::Right, StickDirection::Left)),
-        b("Down", stick(StickSide::Right, StickDirection::Down)),
-        b("Right", stick(StickSide::Right, StickDirection::Right)),
-        b("Space", button(GamepadButton::A)),
-        b("LShift", button(GamepadButton::B)),
-        b("E", button(GamepadButton::X)),
-        b("R", button(GamepadButton::Y)),
-        b("Q", button(GamepadButton::LB)),
-        b("F", button(GamepadButton::RB)),
-        b("LCtrl", trigger(TriggerSide::Left)),
-        b("Z", trigger(TriggerSide::Right)),
-        b("Tab", button(GamepadButton::Back)),
-        b("Enter", button(GamepadButton::Start)),
-        b("I", dpad(DpadDirection::Up)),
-        b("K", dpad(DpadDirection::Down)),
-        b("J", dpad(DpadDirection::Left)),
-        b("L", dpad(DpadDirection::Right)),
-    ]
-}
+pub use crate::presets::default_bindings;
 
 /// Compute the controller report for one player from its bindings and the
 /// set of currently held canonical keys. Recomputed from scratch on every

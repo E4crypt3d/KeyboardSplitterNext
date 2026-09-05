@@ -58,6 +58,13 @@ export interface Snapshot {
   activeProfile: string
 }
 
+export interface PresetMeta {
+  id: string
+  name: string
+  description: string
+  keyCount: number
+}
+
 export interface KeyEventDto {
   device: string
   deviceName: string

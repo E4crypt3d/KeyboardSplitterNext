@@ -142,8 +142,13 @@ export default function Dashboard({
                         value={assigned?.index ?? ''}
                         onChange={async (e) => {
                           const v = e.target.value
-                          const target = v === '' ? (assigned ? assigned.index : null) : Number(v)
-                          if (target === null || assigned?.index === target) return
+                          if (v === '') {
+                            // "unassign": detach this keyboard from its player
+                            if (assigned) await run(api.assignKeyboard(assigned.index, null))
+                            return
+                          }
+                          const target = Number(v)
+                          if (assigned?.index === target) return // no-op
                           await run(api.assignKeyboard(target, d.id))
                         }}
                         className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-emerald-500"

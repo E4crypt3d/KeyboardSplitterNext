@@ -9,6 +9,7 @@ mod core;
 mod engine;
 mod input;
 mod mapping;
+mod presets;
 mod state;
 
 use std::fs;
@@ -88,6 +89,8 @@ pub fn run() {
             commands::load_profile,
             commands::delete_profile,
             commands::list_profiles,
+            commands::apply_preset,
+            commands::list_presets,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../api'
-import { keyLabel, targetLabel, type GamepadButton, type Snapshot, type Target } from '../types'
+import {
+  keyLabel,
+  targetLabel,
+  type GamepadButton,
+  type PresetMeta,
+  type Snapshot,
+  type Target,
+} from '../types'
 import { Button, Card, SectionTitle } from './ui'
 
 export default function Mapping({
@@ -21,6 +28,7 @@ export default function Mapping({
   const [capturing, setCapturing] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const [presets, setPresets] = useState<PresetMeta[]>([])
 
   const playerRef = useRef(player)
 
@@ -29,6 +37,12 @@ export default function Mapping({
   useEffect(() => {
     playerRef.current = player
   })
+
+  // Built-in game presets (loaded once; the backend owns the definitions).
+  useEffect(() => {
+    void api.listPresets().then(setPresets).catch((e) => onError(String(e)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const run = async (p: Promise<unknown>) => {
     setBusy(true)
@@ -193,6 +207,32 @@ export default function Mapping({
               </Button>
             </div>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label
+              htmlFor="preset-picker"
+              className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500"
+            >
+              Game preset
+            </label>
+            <select
+              id="preset-picker"
+              value=""
+              disabled={busy}
+              onChange={(e) => {
+                const id = e.target.value
+                if (!id) return
+                void run(api.applyPreset(player.index, id))
+              }}
+              className="max-w-56 flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-emerald-500"
+            >
+              <option value="">— choose a starter layout —</option>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <ul className="mt-3 space-y-1.5">
             {player.bindings.length === 0 && (
               <li className="py-6 text-center text-sm text-zinc-600">
@@ -224,8 +264,10 @@ export default function Mapping({
               ))}
           </ul>
           <p className="mt-3 text-xs leading-relaxed text-zinc-600">
-            Keys are tracked physically per keyboard, so two players can use the same keys
-            (WASD etc.) on their own keyboards without conflict.
+            Presets are per-player templates (football, fighters, platformers…). Applying one
+            replaces this player's bindings, then you can fine-tune below. Keys are tracked
+            physically per keyboard, so every player can use the same preset on their own
+            keyboard without conflicts.
           </p>
         </Card>
 
@@ -250,6 +292,10 @@ export default function Mapping({
               <span className="animate-pulse text-sm text-amber-300">
                 Listening… press any key on your keyboard
                 {player.keyboardName ? ` (${player.keyboardName})` : ''}
+              </span>
+            ) : snap.engineRunning ? (
+              <span className="text-sm text-zinc-500">
+                Pause the engine to capture keys for editing.
               </span>
             ) : (
               <>

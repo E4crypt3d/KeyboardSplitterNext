@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { Binding, DriverStatus, KeyEventDto, Snapshot } from './types'
+import type { Binding, DriverStatus, KeyEventDto, PresetMeta, Snapshot } from './types'
 
 // --- commands ---------------------------------------------------------------
 
@@ -22,6 +22,12 @@ export const clearMapping = (player: number) =>
 
 export const resetDefault = (player: number) =>
   invoke<Snapshot>('reset_default', { player })
+
+/** Built-in game presets (FIFA, MK, Tekken, ...). */
+export const listPresets = () => invoke<PresetMeta[]>('list_presets')
+/** Replace one player's bindings with a built-in preset. */
+export const applyPreset = (player: number, presetId: string) =>
+  invoke<Snapshot>('apply_preset', { player, presetId })
 
 export const renamePlayer = (player: number, name: string) =>
   invoke<Snapshot>('rename_player', { player, name })
