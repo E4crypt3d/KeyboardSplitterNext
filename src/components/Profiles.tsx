@@ -5,11 +5,11 @@ import { Button, Card, SectionTitle } from './ui'
 
 export default function Profiles({
   snap,
-  refresh,
+  applySnapshot,
   onError,
 }: {
   snap: Snapshot
-  refresh: () => Promise<void>
+  applySnapshot: (s: Snapshot) => void
   onError: (msg: string) => void
 }) {
   const [profiles, setProfiles] = useState<string[]>([])
@@ -31,11 +31,10 @@ export default function Profiles({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap.activeProfile])
 
-  const run = async (p: Promise<unknown>) => {
+  const run = async (p: Promise<Snapshot>) => {
     setBusy(true)
     try {
-      await p
-      await refresh()
+      applySnapshot(await p)
       await loadList()
     } catch (e) {
       onError(String(e))
@@ -48,6 +47,20 @@ export default function Profiles({
     const trimmed = name.trim()
     if (!trimmed) return
     void run(api.saveProfile(trimmed)).then(() => setName(''))
+  }
+
+  // Deleting a profile returns no snapshot, so refresh afterwards (the list
+  // reload in `run` covers the sidebar; this also refreshes other cards).
+  const del = async (p: string) => {
+    setBusy(true)
+    try {
+      await api.deleteProfile(p)
+      await loadList()
+    } catch (e) {
+      onError(String(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -115,7 +128,7 @@ export default function Profiles({
                     <Button
                       variant="danger"
                       disabled={busy || active}
-                      onClick={() => void run(api.deleteProfile(p))}
+                      onClick={() => void del(p)}
                       title={active ? 'Active profiles cannot be deleted' : 'Delete profile'}
                     >
                       Delete

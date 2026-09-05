@@ -26,20 +26,41 @@ export default function App() {
     errorTimer.current = setTimeout(() => setError(null), 6000)
   }, [])
 
+  useEffect(() => () => {
+    // Clear the pending error toast timer on unmount (no stray setState).
+    if (errorTimer.current) clearTimeout(errorTimer.current)
+  }, [])
+
+  // applySnapshot is the single place snapshots enter state. Every mutation
+  // already answers with a fresh Snapshot, so callers pass it straight here
+  // instead of asking the engine again (halves the IPC round-trips).
+  const applySnapshot = useCallback((next: Snapshot) => setSnap(next), [])
+
   const refresh = useCallback(async () => {
     try {
-      setSnap(await api.snapshot())
+      applySnapshot(await api.snapshot())
     } catch (e) {
       showError(String(e))
     }
-  }, [showError])
+  }, [applySnapshot, showError])
 
   useEffect(() => {
     // Data bootstrapping: fetch once on mount (async, not a sync render cascade).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh()
     let unlisten: (() => void) | undefined
-    void api.onEngineChanged(() => void refresh()).then((u) => (unlisten = u))
+    // Backend emits "engine:changed" in bursts (e.g. a key event can recover a
+    // controller and re-emit). Coalesce to at most one snapshot per animation
+    // frame so the UI stays live without hammering IPC.
+    let scheduled = false
+    void api.onEngineChanged(() => {
+      if (scheduled) return
+      scheduled = true
+      requestAnimationFrame(() => {
+        scheduled = false
+        void refresh()
+      })
+    }).then((u) => (unlisten = u))
     return () => unlisten?.()
   }, [refresh])
 
@@ -114,17 +135,22 @@ export default function App() {
         {/* Content */}
         {snap ? (
           tab === 'dashboard' ? (
-            <Dashboard snap={snap} refresh={refresh} onError={showError} goTo={goTo} />
+            <Dashboard
+              snap={snap}
+              applySnapshot={applySnapshot}
+              onError={showError}
+              goTo={goTo}
+            />
           ) : tab === 'mapping' ? (
             <Mapping
               snap={snap}
               selectedPlayer={Math.min(player, Math.max(0, snap.players.length - 1))}
               onSelectPlayer={setPlayer}
-              refresh={refresh}
+              applySnapshot={applySnapshot}
               onError={showError}
             />
           ) : (
-            <Profiles snap={snap} refresh={refresh} onError={showError} />
+            <Profiles snap={snap} applySnapshot={applySnapshot} onError={showError} />
           )
         ) : (
           <div className="flex h-64 items-center justify-center text-sm text-zinc-500">

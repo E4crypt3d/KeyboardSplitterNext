@@ -9,12 +9,12 @@ const TESTER_URL = 'https://gamepad-tester.com'
 
 export default function Dashboard({
   snap,
-  refresh,
+  applySnapshot,
   onError,
   goTo,
 }: {
   snap: Snapshot
-  refresh: () => Promise<void>
+  applySnapshot: (s: Snapshot) => void
   onError: (msg: string) => void
   goTo: (tab: 'dashboard' | 'mapping' | 'profiles', player: number) => void
 }) {
@@ -22,12 +22,13 @@ export default function Dashboard({
   // Test-mode live feedback: last bound key press per player slot.
   const [feed, setFeed] = useState<Record<number, { key: string; label: string }>>({})
 
+  // Mutations already return the fresh Snapshot - apply it directly instead of
+  // issuing a second snapshot request per click.
   const run = async (p: Promise<Snapshot>, ok?: () => void) => {
     setBusy(true)
     try {
-      await p
+      applySnapshot(await p)
       ok?.()
-      await refresh()
     } catch (e) {
       onError(String(e))
     } finally {
@@ -185,7 +186,11 @@ export default function Dashboard({
         <Card>
           <div className="flex items-center justify-between">
             <SectionTitle>Detected keyboards</SectionTitle>
-            <Button variant="ghost" disabled={busy} onClick={() => void refresh()}>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void api.snapshot().then(applySnapshot).catch((e) => onError(String(e)))}
+            >
               ↻ Refresh
             </Button>
           </div>

@@ -14,13 +14,13 @@ export default function Mapping({
   snap,
   selectedPlayer,
   onSelectPlayer,
-  refresh,
+  applySnapshot,
   onError,
 }: {
   snap: Snapshot
   selectedPlayer: number
   onSelectPlayer: (index: number) => void
-  refresh: () => Promise<void>
+  applySnapshot: (s: Snapshot) => void
   onError: (msg: string) => void
 }) {
   const player = snap.players.find((p) => p.index === selectedPlayer) ?? snap.players[0]
@@ -90,11 +90,12 @@ export default function Mapping({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presets])
 
-  const run = async (p: Promise<unknown>) => {
+  // Mutations already return the fresh Snapshot - apply it directly instead of
+  // issuing a second snapshot request per click.
+  const run = async (p: Promise<Snapshot>) => {
     setBusy(true)
     try {
-      await p
-      await refresh()
+      applySnapshot(await p)
     } catch (e) {
       onError(String(e))
     } finally {
