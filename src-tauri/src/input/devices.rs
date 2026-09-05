@@ -178,6 +178,9 @@ mod imp {
 }
 
 #[cfg(not(target_os = "windows"))]
+// Linux/macOS stubs: nothing enumerates them (the capture thread is Windows-only),
+// so silence dead-code there while keeping the Windows build strict.
+#[allow(dead_code)]
 mod imp {
     use super::*;
 

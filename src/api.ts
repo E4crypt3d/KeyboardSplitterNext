@@ -1,6 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { Binding, DriverStatus, KeyEventDto, PresetMeta, Snapshot } from './types'
+import type {
+  Binding,
+  DriverStatus,
+  KeyEventDto,
+  PresetMeta,
+  Snapshot,
+  TestEventDto,
+} from './types'
 
 // --- commands ---------------------------------------------------------------
 
@@ -10,6 +17,15 @@ export const probeDriver = () => invoke<DriverStatus>('probe_driver')
 
 export const assignKeyboard = (player: number, keyboard: string | null) =>
   invoke<Snapshot>('assign_keyboard', { player, keyboard })
+
+/** Start/stop "press a key to assign": wait for the next key on an
+ *  unassigned keyboard and bind it to this player slot (Escape cancels). */
+export const setTapAssign = (player: number | null) =>
+  invoke<Snapshot>('set_tap_assign', { player })
+
+/** Live-input feedback while the engine runs (off by default). */
+export const setTestMode = (enabled: boolean) =>
+  invoke<Snapshot>('set_test_mode', { enabled })
 
 export const setBinding = (player: number, binding: Binding) =>
   invoke<Snapshot>('set_binding', { player, binding })
@@ -25,6 +41,9 @@ export const resetDefault = (player: number) =>
 
 /** Built-in game presets (FIFA, MK, Tekken, ...). */
 export const listPresets = () => invoke<PresetMeta[]>('list_presets')
+/** Canonical key names bound by one built-in preset (display order). */
+export const listPresetKeys = (presetId: string) =>
+  invoke<string[]>('list_preset_keys', { presetId })
 /** Replace one player's bindings with a built-in preset. */
 export const applyPreset = (player: number, presetId: string) =>
   invoke<Snapshot>('apply_preset', { player, presetId })
@@ -53,4 +72,9 @@ export function onEngineChanged(cb: () => void): Promise<UnlistenFn> {
 /** Stream of raw key events (used by the mapping editor's key capture). */
 export function onKeyEvent(cb: (e: KeyEventDto) => void): Promise<UnlistenFn> {
   return listen<KeyEventDto>('kb:event', (ev) => cb(ev.payload))
+}
+
+/** Stream of bound key presses while test mode is enabled and engine runs. */
+export function onTestEvent(cb: (e: TestEventDto) => void): Promise<UnlistenFn> {
+  return listen<TestEventDto>('test:event', (ev) => cb(ev.payload))
 }

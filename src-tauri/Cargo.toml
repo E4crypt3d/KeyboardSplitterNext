@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.0"
+version = "0.3.0"
 description = "Modern Keyboard Splitter - multiple keyboards as independent virtual Xbox controllers"
 authors = ["e4crypt3d"]
 license = ""
@@ -31,7 +31,9 @@ tauri-plugin-log = "2"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Security",
     "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
     "Win32_UI_Input",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",

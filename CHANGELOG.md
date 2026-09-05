@@ -2,6 +2,35 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.0] - 2026-09-05
+
+### Added
+- **A getting-started checklist** on the Dashboard that walks you through the
+  whole setup - install the driver, plug in the keyboards, assign them and
+  start the engine - and ticks off each step as you complete it.
+- **Assign a keyboard by pressing a key on it** - with two identical
+  keyboards you no longer have to guess which list entry is which. Press
+  "Assign by key" under a player and tap any key on the keyboard you mean
+  (Esc cancels).
+- **Test mode** - switch it on, press the keys you bound and watch the
+  Dashboard show the exact controller action each key triggers. Verify a
+  mapping before you even launch the game.
+- **The Mapping editor now tells you which game preset a player is
+  currently using** - the picker highlights the matching preset, and shows a
+  clear notice when a player's custom layout matches none of the built-in
+  ones anymore (e.g. after in-game rebinding).
+- A "Not working?" help card on the Dashboard with the answers to the most
+  common questions: where virtual pads actually show up (Xbox pads never
+  appear in joy.cpl), what to do when the driver is installed but no pad
+  appears, and which online modes block virtual controllers.
+- Only one copy of the app runs at a time now - launching it again while it
+  sits in the system tray just closes the duplicate instead of two copies
+  fighting over the same keyboards.
+
+### Fixed
+- Fixed a bug where dropdown lists (like the game-preset picker) opened with
+  a white background instead of matching the app's dark theme.
+
 ## [0.2.0] - 2026-09-05
 
 ### Added

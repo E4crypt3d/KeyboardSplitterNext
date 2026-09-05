@@ -11,6 +11,7 @@
 //!   - Mortal Kombat 1/11:       X/Y/A/B = FP/BP/FK/BK · LB throw · RT block
 //!   - Tekken 7/8:               X/Y/A/B = LP/RP/LK/RK (combos are key chords)
 //!   - Street Fighter 6:         X/Y/RB = LP/MP/HP · A/B/RT = LK/MK/HK
+//!
 //! The keyboard keys themselves are free (per-player keyboards), so presets
 //! only encode an ergonomic, non-conflicting arrangement. Game defaults can
 //! be tweaked in-game; presets are starting points, not gospel.
@@ -20,7 +21,6 @@ use serde::{Deserialize, Serialize};
 use crate::core::{
     Binding, DpadDirection, GamepadButton, StickDirection, StickSide, Target, TriggerSide,
 };
-use crate::core::keys::{name_for_vk, vk_for_name};
 
 /// Public id of the default layout (also used for new player slots).
 pub const GENERAL_ID: &str = "general";
@@ -347,6 +347,12 @@ pub fn bindings(id: &str) -> Option<Vec<Binding>> {
         .map(|p| p.keys.iter().map(|(k, t)| Binding { key: k.to_string(), target: *t }).collect())
 }
 
+/// The canonical key names of a built-in preset, in display order. The UI
+/// sorts them itself; used to detect which preset a player's bindings match.
+pub fn keys(id: &str) -> Option<Vec<String>> {
+    bindings(id).map(|b| b.into_iter().map(|x| x.key).collect())
+}
+
 /// Default layout for new players == the "general" preset.
 pub fn default_bindings() -> Vec<Binding> {
     bindings(GENERAL_ID).expect("general preset must exist")
@@ -357,7 +363,9 @@ pub fn default_bindings() -> Vec<Binding> {
 // ---------------------------------------------------------------------------
 
 /// True if `key` could conflict with Windows/OS shortcuts when pressed while
-/// the game has focus (presets must stay away from these).
+/// the game has focus (presets must stay away from these). Also the keys that
+/// "press a key to assign" treats as cancel, so they must never be bindable.
+#[cfg(test)]
 fn is_os_reserved(key: &str) -> bool {
     matches!(key, "LWin" | "RWin" | "Apps" | "LAlt" | "RAlt" | "Escape")
 }
@@ -366,6 +374,9 @@ fn is_os_reserved(key: &str) -> bool {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+    // Canonical-key round-trip helpers (test-only: production code only ever
+    // produces names through `name_for_vk` from raw input events).
+    use crate::core::keys::{name_for_vk, vk_for_name};
 
     #[test]
     fn general_is_the_default() {
@@ -376,6 +387,15 @@ mod tests {
             super::default_bindings().iter().map(|b| b.key.clone()).collect();
         assert!(names.contains(&"W".to_string()));
         assert!(names.contains(&"Space".to_string()));
+    }
+
+    #[test]
+    fn keys_mirror_the_preset_definitions() {
+        for def in PRESETS {
+            let expected: Vec<String> = def.keys.iter().map(|(k, _)| k.to_string()).collect();
+            assert_eq!(super::keys(def.id).as_ref(), Some(&expected), "preset {}", def.id);
+        }
+        assert_eq!(super::keys("nope"), None);
     }
 
     #[test]

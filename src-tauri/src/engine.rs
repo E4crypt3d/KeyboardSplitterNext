@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter};
 use crate::controller::{GamepadReport, VirtualController};
 use crate::core::{
     Binding, ControllerState, ControllerStatus, DriverStatus, KeyEventDto, KeyboardDevice,
-    PlayerInfo, SavedConfig, SavedPlayer, Snapshot,
+    PlayerInfo, SavedConfig, SavedPlayer, Snapshot, TestEventDto,
 };
 use crate::mapping::{default_bindings, report_for};
 use crate::presets::{self, PresetMeta};
@@ -53,10 +53,18 @@ pub enum EngineMsg {
     ApplyPreset { player: usize, preset_id: String, reply: Reply<Snapshot> },
     /// List built-in presets (id/name/description).
     ListPresets(Reply<Vec<PresetMeta>>),
+    /// Canonical key names bound by one built-in preset.
+    ListPresetKeys { preset_id: String, reply: Reply<Vec<String>> },
     /// A key was pressed/released on one physical keyboard.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     KeyEvent { device: String, key: String, down: bool },
     /// Device list changed (startup, plug/unplug).
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     DeviceList { devices: Vec<KeyboardDevice> },
+    /// Enter/leave "press a key to assign" mode for one player slot.
+    SetTapAssign { player: Option<usize>, reply: Reply<Snapshot> },
+    /// Enable/disable live input feedback while the engine runs.
+    SetTestMode { enabled: bool, reply: Reply<Snapshot> },
     Shutdown,
 }
 
@@ -120,6 +128,11 @@ struct Core {
     players: Vec<PlayerRuntime>,
     profiles_dir: PathBuf,
     active_profile: String,
+    /// While set, the next key press on an *unassigned* keyboard assigns it
+    /// to this player slot ("press a key to assign"). None when idle.
+    tap_assign: Option<usize>,
+    /// "Test mode": bound key presses are streamed to the UI while running.
+    test_mode: bool,
 }
 
 impl Core {
@@ -135,6 +148,8 @@ impl Core {
             players: Vec::new(),
             profiles_dir,
             active_profile: DEFAULT_PROFILE.to_string(),
+            tap_assign: None,
+            test_mode: false,
         };
         core.load_players_from_file(&core.profile_path(DEFAULT_PROFILE));
         core
@@ -254,6 +269,8 @@ impl Core {
                 })
                 .collect(),
             active_profile: self.active_profile.clone(),
+            tap_assign: self.tap_assign,
+            test_mode: self.test_mode,
         }
     }
 
@@ -423,6 +440,9 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                     for i in 0..core.players.len() {
                         core.ensure_controller(i, false);
                     }
+                    // A pending "press a key" listen can only resolve while
+                    // paused (key events are routed to gameplay once running).
+                    core.tap_assign = None;
                 }
                 changed = true;
                 let _ = reply.send(Ok(core.snapshot()));
@@ -627,8 +647,38 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
             EngineMsg::ListPresets(reply) => {
                 let _ = reply.send(Ok(presets::list()));
             }
+            EngineMsg::ListPresetKeys { preset_id, reply } => {
+                let keys = presets::keys(&preset_id)
+                    .ok_or_else(|| format!("Unknown preset '{preset_id}'"));
+                let _ = reply.send(keys);
+            }
             EngineMsg::KeyEvent { device, key, down } => {
                 handle_key_event(&app, &mut core, &device, &key, down);
+            }
+            EngineMsg::SetTapAssign { player, reply } => {
+                if let Some(p) = player {
+                    if p >= core.players.len() {
+                        let _ = reply.send(Err("No such player slot".to_string()));
+                        continue;
+                    }
+                    // Assignment is a setup-time action: keys are only watched
+                    // for it while the engine is paused. Refuse while running
+                    // so the UI cannot appear "listening" forever.
+                    if core.running {
+                        let _ = reply.send(Err(
+                            "Pause the engine before assigning keyboards".to_string()
+                        ));
+                        continue;
+                    }
+                }
+                core.tap_assign = player;
+                changed = true;
+                let _ = reply.send(Ok(core.snapshot()));
+            }
+            EngineMsg::SetTestMode { enabled, reply } => {
+                core.test_mode = enabled;
+                changed = true;
+                let _ = reply.send(Ok(core.snapshot()));
             }
             EngineMsg::DeviceList { devices } => {
                 core.previous_device_ids = core
@@ -669,32 +719,36 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
 }
 
 fn handle_key_event(app: &AppHandle, core: &mut Core, device: &str, key: &str, down: bool) {
-    // Locate the player this keyboard belongs to.
-    let player_index = core
-        .players
-        .iter()
-        .position(|p| p.keyboard.as_deref() == Some(device));
-    let Some(player_index) = player_index else {
-        return; // unassigned keyboard - ignore
-    };
-
-    let device_name = core
-        .devices
-        .iter()
-        .find(|d| d.id == device)
-        .map(|d| d.name.clone())
-        .unwrap_or_else(|| "Keyboard".to_string());
-
-    // Key events only reach the UI while the engine is paused - that is when
-    // the mapping editor captures keys. During gameplay the events are routed
-    // straight to the controllers with no per-key IPC overhead.
+    // Paused engine = setup time. Handle "press a key to assign" requests
+    // first (they watch *unassigned* keyboards), then forward key events of
+    // assigned keyboards to the UI for the mapping editor's key capture.
     if !core.running {
-        let _ = app.emit(
-            "kb:event",
-            KeyEventDto { device: device.to_string(), device_name, key: key.to_string(), down },
-        );
+        if core.tap_assign.is_some() && handle_tap_event(core, device, key, down) {
+            let _ = app.emit("engine:changed", ());
+        }
+        let device_name = core
+            .devices
+            .iter()
+            .find(|d| d.id == device)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| "Keyboard".to_string());
+        if core.players.iter().any(|p| p.keyboard.as_deref() == Some(device)) {
+            let _ = app.emit(
+                "kb:event",
+                KeyEventDto { device: device.to_string(), device_name, key: key.to_string(), down },
+            );
+        }
         return;
     }
+
+    // Gameplay: route the key to its player's virtual controller.
+    let Some(player_index) = core
+        .players
+        .iter()
+        .position(|p| p.keyboard.as_deref() == Some(device))
+    else {
+        return; // unassigned keyboard - ignore
+    };
 
     // Only meaningful (bound) keys can change the controller state, but we
     // still track everything to keep release events correct.
@@ -703,6 +757,15 @@ fn handle_key_event(app: &AppHandle, core: &mut Core, device: &str, key: &str, d
         p.held.insert(key.to_string());
     } else {
         p.held.remove(key);
+    }
+
+    // Test mode is an explicit opt-in (off by default) so gameplay never
+    // pays for per-keystroke IPC unless the user asks for live feedback.
+    if core.test_mode && p.bindings.iter().any(|b| b.key == key) {
+        let _ = app.emit(
+            "test:event",
+            TestEventDto { player: player_index, key: key.to_string(), down },
+        );
     }
 
     let report = report_for(&p.bindings, &p.held);
@@ -736,6 +799,147 @@ fn handle_key_event(app: &AppHandle, core: &mut Core, device: &str, key: &str, d
             }
             p.last_report = None;
         }
+    }
+}
+
+/// "Press a key to assign": consume one key-down while the engine is paused
+/// and, if it came from a keyboard that is not already feeding another
+/// player, assign it to the listening player slot. Escape cancels. Returns
+/// true when the listening state ended (assignment or cancel).
+fn handle_tap_event(core: &mut Core, device: &str, key: &str, down: bool) -> bool {
+    let Some(target) = core.tap_assign else { return false };
+    if !down {
+        return false;
+    }
+    if key == "Escape" {
+        core.tap_assign = None;
+        return true;
+    }
+    // The keyboard must still be connected.
+    if !core.devices.iter().any(|d| d.id == device) {
+        return false;
+    }
+    // A keyboard can only feed one player. If it already belongs to a
+    // *different* slot the press is ignored (keeps listening) so nobody
+    // accidentally steals a keyboard mid-setup.
+    let owned_by_other = core
+        .players
+        .iter()
+        .enumerate()
+        .any(|(i, p)| i != target && p.keyboard.as_deref() == Some(device));
+    if owned_by_other {
+        return false;
+    }
+    let already_owned = core
+        .players
+        .get(target)
+        .map(|p| p.keyboard.as_deref() == Some(device))
+        .unwrap_or(false);
+    if already_owned {
+        // Pressing the player's own keyboard again is not an assignment -
+        // keep listening for a different (unassigned) keyboard.
+        return false;
+    }
+
+    // Assign: detach the device from any other slot first, then bind it to
+    // the listening player and clear stale held keys.
+    for p in core.players.iter_mut() {
+        if p.keyboard.as_deref() == Some(device) {
+            p.keyboard = None;
+            p.held.clear();
+            p.last_report = None;
+        }
+    }
+    if let Some(p) = core.players.get_mut(target) {
+        p.keyboard = Some(device.to_string());
+        p.held.clear();
+        p.last_report = None;
+    }
+    core.tap_assign = None;
+    // Give the freshly assigned player a live controller right away (same as
+    // the dropdown assignment path) so the UI shows the connect state.
+    core.ensure_controller(target, false);
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A Core with two default player slots and a couple of connected
+    /// keyboards, stored in a throwaway directory (Linux runs these tests:
+    /// `ensure_controller` simply fails gracefully without ViGEmBus).
+    fn core_with_devices() -> Core {
+        let dir = std::env::temp_dir().join(format!(
+            "ksx-engine-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let mut core = Core::new(dir);
+        core.devices = vec![
+            KeyboardDevice {
+                id: "kbd-a".into(),
+                name: "Keyboard A".into(),
+                vendor_id: 1,
+                product_id: 1,
+                path: "".into(),
+            },
+            KeyboardDevice {
+                id: "kbd-b".into(),
+                name: "Keyboard B".into(),
+                vendor_id: 2,
+                product_id: 2,
+                path: "".into(),
+            },
+        ];
+        core
+    }
+
+    #[test]
+    fn tap_assign_binds_an_unassigned_keyboard() {
+        let mut core = core_with_devices();
+        core.tap_assign = Some(0);
+
+        let changed = handle_tap_event(&mut core, "kbd-a", "W", true);
+        assert!(changed, "an unassigned keyboard press should end listening");
+        assert_eq!(core.tap_assign, None);
+        assert_eq!(core.players[0].keyboard.as_deref(), Some("kbd-a"));
+        assert_eq!(core.players[1].keyboard, None);
+    }
+
+    #[test]
+    fn tap_assign_ignores_releases_and_other_players_keyboards() {
+        let mut core = core_with_devices();
+        core.players[1].keyboard = Some("kbd-a".into()); // player 2 owns A
+        core.tap_assign = Some(0);
+
+        // Key-up does nothing.
+        assert!(!handle_tap_event(&mut core, "kbd-b", "W", false));
+        // Keyboard already feeding another player is ignored (still listening).
+        assert!(!handle_tap_event(&mut core, "kbd-a", "W", true));
+        assert_eq!(core.tap_assign, Some(0));
+        assert_eq!(core.players[0].keyboard, None);
+        assert_eq!(core.players[1].keyboard.as_deref(), Some("kbd-a"));
+    }
+
+    #[test]
+    fn tap_assign_escape_cancels_without_binding() {
+        let mut core = core_with_devices();
+        core.tap_assign = Some(1);
+
+        assert!(handle_tap_event(&mut core, "kbd-a", "Escape", true));
+        assert_eq!(core.tap_assign, None);
+        assert_eq!(core.players[1].keyboard, None);
+    }
+
+    #[test]
+    fn tap_assign_can_replace_the_listening_players_own_keyboard() {
+        let mut core = core_with_devices();
+        core.players[0].keyboard = Some("kbd-a".into());
+        core.tap_assign = Some(0);
+
+        assert!(handle_tap_event(&mut core, "kbd-b", "Space", true));
+        assert_eq!(core.players[0].keyboard.as_deref(), Some("kbd-b"));
     }
 }
 

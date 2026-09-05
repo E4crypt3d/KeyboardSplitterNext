@@ -151,6 +151,11 @@ pub struct Snapshot {
     pub devices: Vec<KeyboardDevice>,
     pub players: Vec<PlayerInfo>,
     pub active_profile: String,
+    /// Player slot waiting for "press any key" keyboard assignment, if any.
+    pub tap_assign: Option<usize>,
+    /// When enabled, bound key presses are streamed to the UI while the
+    /// engine runs ("test mode") so users can verify a mapping live.
+    pub test_mode: bool,
 }
 
 /// Event payload emitted when a key is pressed/released on an assigned keyboard.
@@ -160,6 +165,17 @@ pub struct Snapshot {
 pub struct KeyEventDto {
     pub device: String,
     pub device_name: String,
+    pub key: String,
+    pub down: bool,
+}
+
+/// Payload of a "test mode" event: one bound key press/release on a player's
+/// keyboard, streamed while the engine runs so the UI can show live feedback.
+/// The frontend resolves the human label from its own copy of the bindings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestEventDto {
+    pub player: usize,
     pub key: String,
     pub down: bool,
 }

@@ -99,19 +99,38 @@ prefer to review each release before it goes live.
 
 ## Typical first run
 
+The **Dashboard** shows a live checklist (install driver → plug in keyboards →
+assign them → start engine) so you always know what's left.
+
 1. Plug in one keyboard **per player** (they can be identical models - each
    is tracked separately).
-2. **Dashboard** → assign each keyboard to a player slot. A virtual Xbox 360
-   controller is created per player (Windows plays a connect sound).
+2. **Dashboard** → assign each keyboard to a player slot. Two keyboards that
+   look identical are hard to tell apart in a list, so press **⌨ Assign by
+   key** under a player and tap any key on the keyboard you mean - no guessing
+   which row is which. A virtual Xbox 360 controller is created per player
+   (Windows plays a connect sound).
 3. Press **Start engine**.
-4. Give each player a layout in **Mapping**: pick a built-in **game preset**
+4. (Optional but recommended) flip **Test inputs** on and press a few bound
+   keys - the Dashboard shows the controller action each key triggers, so you
+   can verify a mapping before launching the game.
+5. Give each player a layout in **Mapping**: pick a built-in **game preset**
    (Football, Mortal Kombat, Tekken, racing, platformers, twin-stick and
    more), or build your own - press **Capture key**, tap a key on that
    player's keyboard, then click the controller action
-   (e.g. `W` → `Left Stick ↑`, `Space` → `A`).
-5. Open your game. Each player controls the game with their own keyboard.
-6. Close the window to keep it running in the tray; **Quit** from the tray
+   (e.g. `W` → `Left Stick ↑`, `Space` → `A`). The preset picker highlights
+   which preset a player is currently using and flags custom layouts that
+   match none of the built-in ones.
+6. Open your game. Each player controls the game with their own keyboard.
+7. Close the window to keep it running in the tray; **Quit** from the tray
    unplugs the controllers cleanly.
+
+Only one instance of the app runs per session: launching it again while it is
+in the tray just exits (two engines would fight over the same keyboards and
+controllers). If a game doesn't see a controller, the Dashboard's
+**"Not working?"** card has the fixes - the short version: Xbox pads never
+show in `joy.cpl` (check gamepad-tester.com instead), run the app as
+administrator if the driver is installed but no pad appears, and anti-cheat
+online modes (EA FC / FIFA, ranked fighters) block virtual controllers.
 
 ## Architecture
 

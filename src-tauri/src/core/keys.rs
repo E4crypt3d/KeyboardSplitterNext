@@ -74,6 +74,9 @@ const NAMED_KEYS: &[(u16, &str)] = &[
 ];
 
 /// Convert a Windows virtual key code into a canonical name.
+/// (Only the Windows-only capture thread feeds it; non-Windows builds keep it
+/// alive for the canonical-name tests until a second raw-input backend lands.)
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn name_for_vk(vk: u16) -> String {
     if (VK_DIGIT0..=VK_DIGIT0 + 9).contains(&vk) {
         return ((b'0' + (vk - VK_DIGIT0) as u8) as char).to_string();

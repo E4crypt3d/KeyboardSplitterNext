@@ -38,11 +38,57 @@ export default function Mapping({
     playerRef.current = player
   })
 
+  // Sorted keys currently bound to this player.
+  const boundKeys = useMemo(() => {
+    return [...player.bindings].map((b) => b.key).sort()
+  }, [player.bindings])
+
+  // Canonical per-preset key lists, fetched from the backend once the preset
+  // list arrives. Only the ids are cached here, never the targets.
+  const [presetKeys, setPresetKeys] = useState<Map<string, string[]>>(() => new Map())
+
+  // Which built-in preset (if any) currently matches this player's bindings.
+  // We compare the sorted key list against each preset so the picker shows
+  // the real current preset, not the last value selected in the dropdown.
+  const appliedPreset = useMemo<PresetMeta | null>(() => {
+    if (!presets.length || !boundKeys.length) return null
+    for (const p of presets) {
+      const keys = presetKeys.get(p.id)
+      if (!keys) continue
+      if (keys.length !== boundKeys.length) continue
+      if (keys.join(',') === boundKeys.join(',')) return p
+    }
+    return null
+  }, [presets, presetKeys, boundKeys])
+
   // Built-in game presets (loaded once; the backend owns the definitions).
   useEffect(() => {
     void api.listPresets().then(setPresets).catch((e) => onError(String(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Fetch the per-preset binding-key lists so the preset picker can compare
+  // them against the current player's bindings.
+  useEffect(() => {
+    if (!presets.length) return
+    let cancelled = false
+    void Promise.all(
+      presets.map((p) =>
+        api.listPresetKeys(p.id).then((keys) => {
+          if (cancelled) return
+          setPresetKeys((prev) => {
+            const next = new Map(prev)
+            next.set(p.id, [...keys].sort())
+            return next
+          })
+        }),
+      ),
+    ).catch((e) => onError(String(e)))
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presets])
 
   const run = async (p: Promise<unknown>) => {
     setBusy(true)
@@ -216,7 +262,7 @@ export default function Mapping({
             </label>
             <select
               id="preset-picker"
-              value=""
+              value={appliedPreset?.id ?? ''}
               disabled={busy}
               onChange={(e) => {
                 const id = e.target.value
@@ -233,6 +279,11 @@ export default function Mapping({
               ))}
             </select>
           </div>
+          <p className="mt-2 text-xs leading-relaxed text-amber-400/80">
+            Presets match the games' Xbox defaults, but in-game rebinding changes them — verify in
+            the game's controller settings. Online modes with anti-cheat (EA FC / FIFA, ranked
+            fighters) can block virtual controllers; presets are built for local and co-op play.
+          </p>
           <ul className="mt-3 space-y-1.5">
             {player.bindings.length === 0 && (
               <li className="py-6 text-center text-sm text-zinc-600">
@@ -263,12 +314,21 @@ export default function Mapping({
                 </li>
               ))}
           </ul>
-          <p className="mt-3 text-xs leading-relaxed text-zinc-600">
-            Presets are per-player templates (football, fighters, platformers…). Applying one
-            replaces this player's bindings, then you can fine-tune below. Keys are tracked
-            physically per keyboard, so every player can use the same preset on their own
-            keyboard without conflicts.
-          </p>
+          {appliedPreset ? (
+            <p className="mt-3 text-xs leading-relaxed text-emerald-400/90">
+              Currently using{' '}
+              <span className="font-medium">{appliedPreset.name}</span>
+              {' '}— fine-tune any key below by pressing its entry to unbind it, then capture a new one.
+            </p>
+          ) : player.bindings.length > 0 ? (
+            <p className="mt-3 text-xs leading-relaxed text-zinc-600">
+              This player has custom bindings with no matching built-in preset.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs leading-relaxed text-zinc-600">
+              Apply a preset to fill this player's bindings, or capture keys and pick actions one by one.
+            </p>
+          )}
         </Card>
 
         {/* Capture + picker */}

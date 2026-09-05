@@ -56,6 +56,10 @@ export interface Snapshot {
   devices: KeyboardDevice[]
   players: PlayerInfo[]
   activeProfile: string
+  /** Player slot waiting for a "press any key" keyboard assignment, if any. */
+  tapAssign: number | null
+  /** Live-input feedback toggled by the user ("test mode"). */
+  testMode: boolean
 }
 
 export interface PresetMeta {
@@ -68,6 +72,13 @@ export interface PresetMeta {
 export interface KeyEventDto {
   device: string
   deviceName: string
+  key: string
+  down: boolean
+}
+
+/** Live "test mode" payload: one bound key press/release on a player's keyboard. */
+export interface TestEventDto {
+  player: number
   key: string
   down: boolean
 }

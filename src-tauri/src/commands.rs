@@ -60,6 +60,22 @@ pub fn assign_keyboard(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub fn set_tap_assign(
+    engine: State<'_, EngineHandle>,
+    player: Option<usize>,
+) -> Result<Snapshot, String> {
+    ask(&engine, |reply| EngineMsg::SetTapAssign { player, reply })
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn set_test_mode(
+    engine: State<'_, EngineHandle>,
+    enabled: bool,
+) -> Result<Snapshot, String> {
+    ask(&engine, |reply| EngineMsg::SetTestMode { enabled, reply })
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub fn set_binding(
     engine: State<'_, EngineHandle>,
     player: usize,
@@ -127,6 +143,14 @@ pub fn list_presets(
     engine: State<'_, EngineHandle>,
 ) -> Result<Vec<PresetMeta>, String> {
     ask(&engine, EngineMsg::ListPresets)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn list_preset_keys(
+    engine: State<'_, EngineHandle>,
+    preset_id: String,
+) -> Result<Vec<String>, String> {
+    ask(&engine, |reply| EngineMsg::ListPresetKeys { preset_id, reply })
 }
 
 #[tauri::command(rename_all = "camelCase")]

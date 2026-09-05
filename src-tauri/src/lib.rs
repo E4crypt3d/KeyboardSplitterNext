@@ -29,8 +29,56 @@ use crate::state::{EngineHandle, QuitFlag};
 /// Keeps the tray icon alive for the lifetime of the app.
 struct TrayHolder(Mutex<Option<TrayIcon>>);
 
+/// Windows named-mutex single-instance guard (no extra dependency needed:
+/// the `windows` crate is already a dependency). Two engines fighting over
+/// the same keyboards, profile file and ViGEmBus controllers is a real
+/// conflict, so a second launch exits immediately - the first instance keeps
+/// running in the tray. A kernel mutex is released automatically when the
+/// owning process dies, so a stale lock can never block a restart.
+#[cfg(target_os = "windows")]
+fn acquire_single_instance() -> bool {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GetLastError};
+    use windows::Win32::System::Threading::CreateMutexW;
+
+    let name: Vec<u16> = "Local\\KeyboardSplitterNext.SingleInstance"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: standard Win32 call with a valid UTF-16 name; the handle is
+    // either closed below (duplicate) or leaked for the process lifetime.
+    match unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())) } {
+        Ok(handle) => {
+            let already_exists = unsafe { GetLastError().0 == ERROR_ALREADY_EXISTS.0 };
+            if already_exists {
+                // Duplicate instance - release our handle and let it exit.
+                unsafe { let _ = CloseHandle(handle); }
+                false
+            } else {
+                // First instance: the handle is a raw pointer with no Drop
+                // impl, so simply not closing it keeps the mutex alive for
+                // the whole process lifetime (the OS cleans up on exit).
+                true
+            }
+        }
+        Err(e) => {
+            // Creating the mutex failed for an unrelated reason (rare). Do
+            // not block startup on it - log and continue.
+            log::warn!("single-instance guard unavailable: {e:?}");
+            true
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Only one engine may ever run per session (Windows is the only OS where
+    // the app works at all, but the guard is cheap and explicit).
+    #[cfg(target_os = "windows")]
+    if !acquire_single_instance() {
+        std::process::exit(0);
+    }
+
     let app = tauri::Builder::default()
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -77,6 +125,8 @@ pub fn run() {
             commands::set_running,
             commands::probe_driver,
             commands::assign_keyboard,
+            commands::set_tap_assign,
+            commands::set_test_mode,
             commands::set_binding,
             commands::remove_binding,
             commands::clear_mapping,
@@ -91,6 +141,7 @@ pub fn run() {
             commands::list_profiles,
             commands::apply_preset,
             commands::list_presets,
+            commands::list_preset_keys,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
