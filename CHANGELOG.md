@@ -2,6 +2,30 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.1] - 2026-09-05
+
+### Fixed
+- Fixed a bug where every key press was processed up to eight times
+  (duplicate events, wasted CPU) - each key event is now handled exactly
+  once, with a reused buffer that stops keystrokes from allocating memory.
+- Fixed a bug where the app could freeze for a moment when you clicked
+  buttons like Start engine or Save profile - those requests now wait for
+  the engine on a background task with a timeout instead of blocking the
+  interface.
+- Fixed a bug where the app kept using a dead driver connection after the
+  ViGEmBus driver was updated or reinstalled mid-session - the "Reconnect
+  controllers" button now starts over with a fresh connection.
+
+### Changed
+- **Security**: the app now runs under a strict Content Security Policy,
+  blocking scripts and content that did not come from the app itself.
+- All players share one connection to the ViGEmBus driver instead of opening
+  one per player - controllers connect faster and the app uses fewer system
+  handles.
+- The interface is snappier: clicking a button applies the fresh state it
+  already received (one round-trip less per click), and rapid change
+  notifications are combined into a single update per animation frame.
+
 ## [0.3.0] - 2026-09-05
 
 ### Added

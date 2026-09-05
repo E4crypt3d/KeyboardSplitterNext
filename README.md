@@ -28,8 +28,8 @@ idea: **Tauri v2 + React + Rust**, Raw Input for device detection and
    controller action (buttons, D-Pad, triggers, left/right stick directions).
    Released keys cancel; opposite directions (`W`+`S`) zero out.
 4. **Virtual controller** – the engine pushes an XInput report to a
-   ViGEmBus-created Xbox 360 controller per player. Games poll XInput and see
-   a real gamepad.
+   ViGEmBus-created Xbox 360 controller per player (all players share one
+   bus connection). Games poll XInput and see a real gamepad.
 
 Everything (players, keyboard assignments, bindings) is stored as JSON
 profiles and auto-saved. The app minimizes to the system tray and keeps

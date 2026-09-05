@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.0"
+version = "0.3.1"
 description = "Modern Keyboard Splitter - multiple keyboards as independent virtual Xbox controllers"
 authors = ["e4crypt3d"]
 license = ""
