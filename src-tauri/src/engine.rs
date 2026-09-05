@@ -557,6 +557,11 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                 let _ = reply.send(Ok(core.snapshot()));
             }
             EngineMsg::ReconnectControllers(reply) => {
+                // A reconnect must start from a fresh bus connection: the cached
+                // ViGEmBus handle may be dead (driver reinstalled or updated
+                // mid-session), so reusing it would keep failing.
+                #[cfg(target_os = "windows")]
+                crate::controller::vigem::invalidate_shared_client();
                 for i in 0..core.players.len() {
                     core.ensure_controller(i, true);
                 }
