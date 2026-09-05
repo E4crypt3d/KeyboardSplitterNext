@@ -87,7 +87,8 @@ Two GitHub Actions workflows live in `.github/workflows/`:
 Cutting a release is therefore just:
 
 ```bash
-# bump "version" in src-tauri/tauri.conf.json (and keep package.json in sync)
+# bump "version" in src-tauri/tauri.conf.json (and keep package.json in sync),
+# add a CHANGELOG.md entry in plain language, then:
 git add -A && git commit -m "release v0.2.0" && git push
 ```
 
@@ -103,8 +104,10 @@ prefer to review each release before it goes live.
 2. **Dashboard** → assign each keyboard to a player slot. A virtual Xbox 360
    controller is created per player (Windows plays a connect sound).
 3. Press **Start engine**.
-4. Configure mappings per player in **Mapping**: press **Capture key**, tap a
-   key on that player's keyboard, then click the controller action
+4. Give each player a layout in **Mapping**: pick a built-in **game preset**
+   (Football, Mortal Kombat, Tekken, racing, platformers, twin-stick and
+   more), or build your own - press **Capture key**, tap a key on that
+   player's keyboard, then click the controller action
    (e.g. `W` → `Left Stick ↑`, `Space` → `A`).
 5. Open your game. Each player controls the game with their own keyboard.
 6. Close the window to keep it running in the tray; **Quit** from the tray
@@ -120,11 +123,12 @@ Rust engine thread                         src-tauri/src/engine.rs
   ├── input::devices   Raw Input enumeration (VID/PID, hot-plug)
   ├── input::capture   message-only window, per-device key events   (Windows)
   ├── mapping          key → controller-action rules + report math  (pure)
+  ├── presets          built-in game layouts (FIFA/FC, PES, MK, Tekken, ...)
   └── controller       VirtualController trait
        ├── vigem       ViGEmBus Xbox 360 backend                    (Windows)
        └── (trait keeps it replaceable)
 
-Profiles (JSON, auto-saved)                %APPDATA%/com.tauri.dev/profiles/
+Profiles (JSON, auto-saved)                %APPDATA%/com.e4crypt3d.keyboardsplitter/profiles/
 ```
 
 Guidelines followed from the spec: no custom driver; the virtual controller
@@ -144,7 +148,8 @@ src-tauri/
   src/
     core/                 shared serde model + key-name tables
     input/                devices.rs, capture.rs (Raw Input, Windows)
-    mapping/              bindings, default layouts, report computation
+    mapping/              bindings + report computation (pure)
+    presets.rs            built-in game starter layouts
     controller/           trait + report; vigem.rs (ViGEmBus, Windows)
     engine.rs             engine thread, player/controller lifecycle
     commands.rs           Tauri IPC
