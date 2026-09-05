@@ -1,0 +1,100 @@
+name: Release
+
+# Builds the Windows installer(s) and publishes a GitHub Release.
+#
+# Automatic flow (no manual tags needed):
+#   1. Bump the version in src-tauri/tauri.conf.json
+#   2. Commit + push to the default branch (main/master)
+#   3. This workflow detects the new version, builds on Windows and
+#      publishes a GitHub Release "Keyboard Splitter vX.Y.Z" (it creates the
+#      vX.Y.Z tag itself).
+#
+# Re-runs for the same version are skipped (the version tag already exists),
+# and a manual run is always possible via workflow_dispatch.
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build & release (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read the app version and check whether this exact version was
+      # already released (tag v<version> exists in the remote).
+      - name: Resolve app version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Version ${VERSION} was already released (${TAG} exists), skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Bun
+        if: steps.version.outputs.exists == 'false'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust (stable, MSVC)
+        if: steps.version.outputs.exists == 'false'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        if: steps.version.outputs.exists == 'false'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        if: steps.version.outputs.exists == 'false'
+        run: bun install --frozen-lockfile
+
+      # tauri-action runs `bun tauri build` (frontend is built by the
+      # beforeBuildCommand in tauri.conf.json), uploads the bundles and
+      # creates the GitHub Release + version tag itself.
+      - name: Build & upload to release
+        id: build
+        if: steps.version.outputs.exists == 'false'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # The action replaces __VERSION__ with the version from tauri.conf.json
+          # (same value resolved above, so the tag matches the pushed bump).
+          tagName: v__VERSION__
+          releaseName: 'Keyboard Splitter v__VERSION__'
+          releaseBody: |
+            ## Keyboard Splitter v__VERSION__
+
+            Windows installer(s) for turning multiple physical keyboards into
+            independent virtual Xbox controllers.
+
+            > Requires the [ViGEmBus driver](https://github.com/nefarius/ViGEmBus/releases)
+            > to be installed once before first use.
+          generateReleaseNotes: true
+          # Set to `true` to review the draft before publishing, or `false`
+          # (default below) to publish the release automatically.
+          releaseDraft: false
+          prerelease: false
+          args: ''
+
+      - name: Show release URL
+        if: steps.version.outputs.exists == 'false'
+        shell: bash
+        run: |
+          echo "Release created: ${{ steps.build.outputs.releaseHtmlUrl }}"

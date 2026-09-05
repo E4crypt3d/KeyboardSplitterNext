@@ -1,0 +1,39 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "Modern Keyboard Splitter - multiple keyboards as independent virtual Xbox controllers"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = ["tray-icon"] }
+tauri-plugin-log = "2"
+
+# Windows-only backend crates:
+# - `windows`: Windows API bindings (Raw Input, message-only windows, ...)
+# - `vigem-client`: ViGEmBus virtual gamepad client (the approach used by
+#   KeyboardSplitterXbox and similar tools - no custom driver needed, only
+#   the ViGEmBus driver installed on the machine).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+vigem-client = "0.1"
