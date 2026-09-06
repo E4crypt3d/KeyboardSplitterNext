@@ -27,7 +27,7 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HANDLE, HMODULE};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Diagnostics::Debug::{
-    AddVectoredExceptionHandler, EXCEPTION_POINTERS, MiniDumpNormal, MiniDumpWriteDump,
+    AddVectoredExceptionHandler, EXCEPTION_POINTERS, MiniDumpWithFullMemory, MiniDumpWriteDump,
     MINIDUMP_EXCEPTION_INFORMATION,
 };
 #[cfg(target_os = "windows")]
@@ -166,7 +166,7 @@ unsafe fn write_exception_report(info: *mut EXCEPTION_POINTERS) {
             GetCurrentProcess(),
             GetCurrentProcessId(),
             HANDLE(file.as_raw_handle()),
-            MiniDumpNormal,
+            MiniDumpWithFullMemory,
             Some(&exception),
             None,
             None,
