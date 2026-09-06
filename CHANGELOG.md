@@ -2,6 +2,25 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.2] - 2026-09-06
+
+### Fixed
+- Fixed a bug where the app could crash with a memory/heap error as soon as it
+  opened: a keyboard whose device path ended inside its ID marker made the
+  device-name parser read past the end of the string and abort the whole app.
+- Fixed a bug where a single malformed input packet or any unexpected internal
+  error while listening to keyboards could take the whole app down - the input
+  listener now recovers and keeps working instead.
+- Fixed a bug where the app closed without a trace when something went wrong
+  internally at startup: every crash is now written to
+  `%APPDATA%\com.e4crypt3d.keyboardsplitter\crash-<time>-<id>.log`, so a
+  report can actually be diagnosed.
+
+### Added
+- **Portable version**: every release now also ships as a single zip - unzip
+  anywhere and run the app, no installation required (it still needs the
+  ViGEmBus driver, like the installer version).
+
 ## [0.3.1] - 2026-09-05
 
 ### Fixed

@@ -71,6 +71,11 @@ bun run tauri dev
 bun run tauri build    # produces an NSIS/MSI installer under src-tauri/target/release/bundle/
 ```
 
+The same build also produces a **standalone exe** at
+`src-tauri/target/release/Keyboard Splitter.exe` - a portable, no-install
+download (WebView2 ships with Windows 10/11; only the ViGEmBus driver is
+still required). CI packages it as a zip release asset automatically.
+
 Install that on each player's machine, then also install ViGEmBus once.
 
 ## Continuous integration & releases
@@ -82,14 +87,16 @@ Two GitHub Actions workflows live in `.github/workflows/`:
 - **Release** (`release.yml`) - **triggers automatically on a version bump**: a
   commit that raises the version in `src-tauri/tauri.conf.json` on the default
   branch builds on Windows and publishes a GitHub Release with the NSIS/MSI
-  bundles (the `v<version>` tag is created for you).
+  bundles plus a portable zip of the standalone exe (the `v<version>` tag is
+  created for you).
 
 Cutting a release is therefore just:
 
 ```bash
-# bump "version" in src-tauri/tauri.conf.json (and keep package.json in sync),
-# add a CHANGELOG.md entry in plain language, then:
-git add -A && git commit -m "release v0.2.0" && git push
+# bump "version" in src-tauri/tauri.conf.json (and keep package.json and
+# src-tauri/Cargo.toml in sync), add a CHANGELOG.md entry in plain language,
+# then:
+git add -A && git commit -m "chore(release): bump to 0.3.2" && git push
 ```
 
 The workflow skips runs whose version was already released, so unrelated

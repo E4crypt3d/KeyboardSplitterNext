@@ -66,7 +66,11 @@ jobs:
 
       # tauri-action runs `bun tauri build` (frontend is built by the
       # beforeBuildCommand in tauri.conf.json), uploads the bundles and
-      # creates the GitHub Release + version tag itself.
+      # creates the GitHub Release + version tag itself. Besides the
+      # installers, the build also produces the standalone exe at
+      # src-tauri/target/release/<productName>.exe - packaged as a portable
+      # zip in the next step (no install needed; WebView2 ships with
+      # Windows 10/11, only the ViGEmBus driver is still required).
       - name: Build & upload to release
         id: build
         if: steps.version.outputs.exists == 'false'
@@ -84,6 +88,12 @@ jobs:
             Windows installer(s) for turning multiple physical keyboards into
             independent virtual Xbox controllers.
 
+            ### Downloads
+            - `Keyboard.Splitter_*_x64-setup.exe` / `.msi` - normal installation.
+            - `KeyboardSplitter-v__VERSION__-portable-win64.zip` - portable
+              version, no installation required: unzip anywhere and run the
+              exe inside.
+
             > Requires the [ViGEmBus driver](https://github.com/nefarius/ViGEmBus/releases)
             > to be installed once before first use.
           generateReleaseNotes: true
@@ -92,6 +102,24 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ''
+
+      # Package the standalone exe (already produced by the build above) as
+      # the portable download and attach it to the release tauri-action just
+      # created. --clobber keeps re-runs of the workflow idempotent.
+      - name: Package & upload portable build
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $productName = node -p "require('./src-tauri/tauri.conf.json').productName"
+          $exe = "src-tauri/target/release/$productName.exe"
+          if (-not (Test-Path $exe)) { throw "portable exe not found: $exe" }
+          $zip = "KeyboardSplitter-v$version-portable-win64.zip"
+          Compress-Archive -Path $exe -DestinationPath $zip -Force
+          gh release upload "v$version" $zip --clobber
+          Write-Host "Attached $zip to release v$version"
 
       - name: Show release URL
         if: steps.version.outputs.exists == 'false'
