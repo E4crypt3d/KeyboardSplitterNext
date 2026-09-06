@@ -15,6 +15,7 @@
 
 use std::collections::HashMap;
 use std::mem::size_of;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::mpsc::Sender;
 
@@ -23,7 +24,8 @@ use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT,
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::{
     GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
-    RAWINPUTDEVICE_FLAGS, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RID_INPUT, RIM_TYPEKEYBOARD,
+    RAWINPUTDEVICE_FLAGS, RAWINPUTHEADER, RAWKEYBOARD, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK,
+    RID_INPUT, RIM_TYPEKEYBOARD,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
@@ -95,6 +97,14 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
             // both (e.g. a mouse packet we never asked for).
             return;
         }
+        // Defensive bound check: only reinterpret the buffer as RAWINPUT when
+        // it can actually hold the header plus the keyboard struct. A
+        // truncated or malformed packet must never turn into an out-of-bounds
+        // read (the reported `written` size is not fully trusted).
+        let needed = size_of::<RAWINPUTHEADER>() + size_of::<RAWKEYBOARD>();
+        if (written as usize) < needed || buf.len() < needed {
+            return;
+        }
         let input = unsafe { &*(buf.as_ptr() as *const RAWINPUT) };
         if input.header.dwType != RIM_TYPEKEYBOARD.0 {
             return;
@@ -130,6 +140,28 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
 /// A RAWINPUTKEYBOARD packet is a few dozen bytes; 1 KiB is a generous,
 /// stack-free upper bound for any keyboard raw input blob.
 const RAW_BUF_SIZE: usize = 1024;
+
+/// Direct trampoline installed as the window procedure: the real handler is
+/// kept in a static so every callback runs behind `catch_unwind`. A panic
+/// unwinding out of an `extern "system"` callback aborts the whole process
+/// (Windows shows a generic memory/heap error), so the trampoline catches
+/// panics and falls back to `DefWindowProcW` - WM_INPUT keeps flowing and a
+/// single bad packet can never take the splitter down.
+static WND_PROC: OnceLock<
+    Box<dyn Fn(HWND, u32, WPARAM, LPARAM) -> LRESULT + Send + Sync>,
+> = OnceLock::new();
+
+extern "system" fn wnd_proc_trampoline(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    match WND_PROC.get() {
+        Some(proc) => proc(hwnd, msg, wparam, lparam),
+        None => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
 
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
@@ -179,9 +211,20 @@ unsafe fn message_thread(tx: Sender<EngineMsg>) -> Result<(), String> {
         .map_err(|e| format!("GetModuleHandleW failed: {e:?}"))?;
 
     let class_name = wide(WINDOW_CLASS);
+    let _ = WND_PROC.set(Box::new(|hwnd, msg, wparam, lparam| {
+        match catch_unwind(AssertUnwindSafe(|| unsafe {
+            window_proc(hwnd, msg, wparam, lparam)
+        })) {
+            Ok(result) => result,
+            Err(_) => {
+                log::error!("panic in raw input window procedure (msg=0x{msg:04X}) - recovered");
+                unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+            }
+        }
+    }));
     let wc = WNDCLASSW {
         style: WNDCLASS_STYLES(0),
-        lpfnWndProc: Some(window_proc),
+        lpfnWndProc: Some(wnd_proc_trampoline),
         cbClsExtra: 0,
         cbWndExtra: 0,
         hInstance: hinstance,

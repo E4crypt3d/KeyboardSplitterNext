@@ -13,6 +13,7 @@ mod presets;
 mod state;
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
@@ -28,6 +29,62 @@ use crate::state::{EngineHandle, QuitFlag};
 
 /// Keeps the tray icon alive for the lifetime of the app.
 struct TrayHolder(Mutex<Option<TrayIcon>>);
+
+/// Where crash logs go: mirrors Tauri's `app_config_dir`
+/// (`%APPDATA%\<identifier>` on Windows), falling back to the temp dir when
+/// the env var is missing (non-Windows CI, stripped-down systems).
+fn crash_log_dir() -> PathBuf {
+    const IDENTIFIER: &str = "com.e4crypt3d.keyboardsplitter";
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join(IDENTIFIER)
+}
+
+/// Panic payload as a human readable string (Rust allows `&str` and `String`
+/// payloads; anything else is reported opaquely).
+fn panic_payload(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let payload = info.payload();
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "<non-string panic payload>".to_string()
+    }
+}
+
+/// Last-resort crash logging: release builds have no console (the log plugin
+/// only runs in debug), so a panic on any thread used to exit silently - the
+/// exact "app closes as soon as it opens" report that is impossible to
+/// diagnose remotely. Every panic now lands in
+/// `%APPDATA%\<identifier>\crash-<time>-<pid>.log` (best effort: failures to
+/// write must never panic from inside the hook itself) and still goes to the
+/// previous hook for debug builds.
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let message = panic_payload(info);
+        log::error!("PANIC at {location}: {message}");
+
+        let dir = crash_log_dir();
+        // The data dir may not exist yet if the panic fired before setup.
+        let _ = fs::create_dir_all(&dir);
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let path = dir.join(format!("crash-{stamp}-{}.log", std::process::id()));
+        if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = writeln!(file, "panic at {location}: {message}");
+        }
+        default_hook(info);
+    }));
+}
 
 /// Windows named-mutex single-instance guard (no extra dependency needed:
 /// the `windows` crate is already a dependency). Two engines fighting over
@@ -72,6 +129,9 @@ fn acquire_single_instance() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Install before anything else so even early panics are diagnosable.
+    install_panic_hook();
+
     // Only one engine may ever run per session (Windows is the only OS where
     // the app works at all, but the guard is cheap and explicit).
     #[cfg(target_os = "windows")]

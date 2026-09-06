@@ -7,6 +7,26 @@
 
 use crate::core::KeyboardDevice;
 
+/// Extract vendor/product id from a Windows device path such as
+/// `\\?\USB#VID_046D&PID_C52B#6&2a3b4c&0&1#{...}`.
+///
+/// Panic-free by construction: some drivers expose paths where the string
+/// ends right after (or inside) the `VID_`/`PID_` marker, so the hex slice
+/// is only taken through `str::get`, which returns `None` instead of
+/// panicking on out-of-range or non-character-boundary indices. This ran on
+/// the raw-input thread at startup and on every device plug/unplug, and a
+/// panic here used to abort the whole process with a memory/heap error.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn parse_vid_pid(path: &str) -> (u32, u32) {
+    let hex_at = |marker: &str| -> u32 {
+        path.find(marker)
+            .and_then(|i| path.get(i + marker.len()..i + marker.len() + 4))
+            .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+            .unwrap_or(0)
+    };
+    (hex_at("VID_"), hex_at("PID_"))
+}
+
 #[cfg(target_os = "windows")]
 mod imp {
     use super::*;
@@ -45,18 +65,6 @@ mod imp {
             let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
             Some(String::from_utf16_lossy(&buf[..len]))
         }
-    }
-
-    fn parse_vid_pid(path: &str) -> (u32, u32) {
-        let vid = path
-            .find("VID_")
-            .and_then(|i| u32::from_str_radix(&path[i + 4..i + 8], 16).ok())
-            .unwrap_or(0);
-        let pid = path
-            .find("PID_")
-            .and_then(|i| u32::from_str_radix(&path[i + 4..i + 8], 16).ok())
-            .unwrap_or(0);
-        (vid, pid)
     }
 
     fn device_info(handle: HANDLE) -> Option<RID_DEVICE_INFO> {
@@ -196,3 +204,40 @@ mod imp {
 pub use imp::enumerate;
 #[allow(unused_imports)]
 pub(crate) use imp::enumerate_with_handles;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_vid_pid_from_typical_usb_paths() {
+        let path = r"\\?\USB#VID_046D&PID_C52B#6&2a3b4c&0&1#{884b96c3-56ef-11d1-bc8c-00a0c91405dd}";
+        assert_eq!(parse_vid_pid(path), (0x046D, 0xC52B));
+    }
+
+    #[test]
+    fn truncated_markers_do_not_panic() {
+        // Paths that end right after or inside the marker: slicing used to
+        // panic here and take the whole process down (memory/heap error).
+        // Fewer than 4 hex digits available means no parseable id -> 0.
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#VID_"), (0, 0));
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#PID_1"), (0, 0));
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#VID_04"), (0, 0));
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#PID_123"), (0, 0));
+        // A full 4-digit marker at the very end of the path still parses.
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#VID_046D"), (0x046D, 0));
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#PID_C52B"), (0, 0xC52B));
+    }
+
+    #[test]
+    fn non_hex_and_missing_markers_yield_zero() {
+        assert_eq!(parse_vid_pid(r"\\?\ACPI#PNP0303#..."), (0, 0));
+        assert_eq!(parse_vid_pid(""), (0, 0));
+        assert_eq!(parse_vid_pid(r"\\?\USB#VID_ZZZZ&PID_0000#x"), (0, 0));
+    }
+
+    #[test]
+    fn takes_the_first_marker_occurrence() {
+        assert_eq!(parse_vid_pid("VID_0001&PID_0002&VID_0003"), (0x0001, 0x0002));
+    }
+}
