@@ -2,6 +2,17 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.6] - 2026-09-06
+
+### Changed
+- Crash reports now come with the missing piece: every release also ships a
+  small **symbols file** (`KeyboardSplitter-vX.Y.Z-symbols-win64.zip`). If the
+  app crashes, a developer can load that file in the Windows debugger and see
+  the exact source line behind the crash instead of a meaningless memory
+  address - so real crash reports finally lead to real fixes.
+- Release builds carry full debug information for the same reason (bigger
+  download, no difference in speed).
+
 ## [0.3.5] - 2026-09-06
 
 ### Fixed

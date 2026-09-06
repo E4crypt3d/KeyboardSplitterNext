@@ -89,6 +89,13 @@ crashes additionally save a full-memory `crash-<time>-<id>.dmp` minidump
 next to it). Attach both files when reporting a crash - they name the exact
 component that failed and make the fix possible.
 
+To turn a minidump into an exact source location, also download the
+`KeyboardSplitter-v<version>-symbols-win64.zip` asset from the matching
+GitHub release, unzip it, and point WinDbg's symbol path at the folder
+(`.sympath+ <folder>`): every `Keyboard_Splitter+0x…` offset in the stack
+then resolves to the real function and source line. Symbols are version
+specific - always use the ones from the same release as the crashing exe.
+
 ## Continuous integration & releases
 
 Two GitHub Actions workflows live in `.github/workflows/`:
@@ -107,7 +114,7 @@ Cutting a release is therefore just:
 # bump "version" in src-tauri/tauri.conf.json (and keep package.json and
 # src-tauri/Cargo.toml in sync), add a CHANGELOG.md entry in plain language,
 # then:
-git add -A && git commit -m "chore(release): bump to 0.3.5" && git push
+git add -A && git commit -m "chore(release): bump to 0.3.6" && git push
 ```
 
 The workflow skips runs whose version was already released, so unrelated
