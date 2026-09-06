@@ -114,7 +114,7 @@ Cutting a release is therefore just:
 # bump "version" in src-tauri/tauri.conf.json (and keep package.json and
 # src-tauri/Cargo.toml in sync), add a CHANGELOG.md entry in plain language,
 # then:
-git add -A && git commit -m "chore(release): bump to 0.3.7" && git push
+git add -A && git commit -m "chore(release): bump to 0.3.8" && git push
 ```
 
 The workflow skips runs whose version was already released, so unrelated
@@ -145,6 +145,17 @@ assign them → start engine) so you always know what's left.
    (e.g. `W` → `Left Stick ↑`, `Space` → `A`). The preset picker highlights
    which preset a player is currently using and flags custom layouts that
    match none of the built-in ones.
+
+   **Football presets follow each game's real Xbox defaults** (checked against the games'
+   own control charts): the *EA FC / FIFA* preset matches EA's in-game **Classic** scheme
+   (A pass, B shoot, X cross/lob, Y through ball, RT sprint), and the *eFootball / PES*
+   preset matches Konami's **Standard** scheme that PES 2017 through eFootball ship with
+   (A low pass, X shoot, B lofted pass/cross, Y through ball, RB dash). Both deliberately
+   use the same keyboard keys - only the controller button each key presses differs. If you
+   switch a game to its *other* scheme in its own options, apply the matching preset:
+   eFootball's "Alternate" layout is the EA FC preset, and EA's "Alternate" is the
+   eFootball/PES one.
+
 6. Open your game. Each player controls the game with their own keyboard.
 7. Close the window to keep it running in the tray; **Quit** from the tray
    unplugs the controllers cleanly.

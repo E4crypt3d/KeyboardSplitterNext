@@ -2,6 +2,33 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.8] - 2026-09-06
+
+### Fixed
+- Fixed a bug where you could not select the **Football (eFootball / PES)**
+  preset: choosing it looked like it snapped straight back to the FIFA one.
+  The Mapping editor identified a preset by the physical keys alone, and the
+  two football presets deliberately use the same keys - so any football
+  layout was reported as the FIFA preset and the picker jumped back. It now
+  compares what each key *does* (the full key → controller-button table),
+  so every preset is recognized on its own.
+- Fixed a bug where the eFootball/PES preset pressed the wrong buttons for
+  the game: shoot, pass, cross and through ball were assigned to buttons
+  Konami does not use for them, so e.g. "shoot" crossed the ball instead.
+  The layout was researched against the games' control charts and corrected
+  to the Konami **Standard** scheme that PES 2017 through eFootball ship
+  with: A low pass, X shoot, B lofted pass/cross, Y through ball, dash on
+  RB, specials on RT. The EA FC / FIFA preset now also documents its own
+  in-game **Classic** scheme (A pass, B shoot, X cross/lob, Y through ball,
+  sprint on RT) instead of mixing the two games' conventions.
+
+### Changed
+- The two football presets' descriptions say which in-game scheme each
+  matches and what every key does, including how to get the *other* feel:
+  eFootball's in-game "Alternate" layout is the EA FC preset, and EA's
+  "Alternate" is the eFootball/PES one. PES 2017 players: the eFootball/PES
+  preset is the exact layout PES 2017 ships with.
+
 ## [0.3.7] - 2026-09-06
 
 ### Fixed
