@@ -2,6 +2,28 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.4] - 2026-09-06
+
+### Fixed
+- Fixed a bug where the ViGEmBus download button (and the other external
+  links) did nothing: the app's webview silently ignored them, so the driver
+  page never opened. They now open in your system browser.
+- Fixed a bug where driver trouble - a missing or half-installed ViGEmBus
+  driver - could take the whole app down at startup. The engine now survives
+  and shows the "driver not found" banner instead, with a **Re-check driver**
+  button so you can retry right after installing the driver, no restart
+  needed.
+- Fixed a bug where crash minidumps were too small to diagnose heap
+  corruption: they only stored thread info, not the memory contents that show
+  what actually corrupted the heap. Dumps now include full memory, so the
+  next crash can be pinpointed.
+
+### Changed
+- **The app now runs as administrator** (Windows asks for confirmation each
+  time it starts). This gives the driver connection maximum privileges, and
+  the old "run as administrator" workaround for invisible gamepads is now
+  the default behavior.
+
 ## [0.3.3] - 2026-09-06
 
 ### Fixed

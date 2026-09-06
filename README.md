@@ -50,6 +50,9 @@ splitting while hidden.
 - **Windows 10/11** (x64)
 - **[ViGEmBus driver](https://github.com/nefarius/ViGEmBus/releases)** - the
   virtual gamepad driver (install once; the app shows a banner if missing)
+- **Administrator rights** - the app launches elevated by design (Windows
+  shows a UAC confirmation on every start) so it can always talk to the
+  ViGEmBus driver
 - [Rust](https://rustup.rs) (stable, MSVC toolchain) and the
   [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) runtime
   (preinstalled on Windows 11 / recent Windows 10)
@@ -82,9 +85,9 @@ Install that on each player's machine, then also install ViGEmBus once.
 
 Release builds have no console, so every crash also writes a small report to
 `%APPDATA%\com.e4crypt3d.keyboardsplitter\crash-<time>-<id>.log` (hard
-crashes additionally save a full `crash-<time>-<id>.dmp` minidump next to
-it). Attach both files when reporting a crash - they name the exact component
-that failed and make the fix possible.
+crashes additionally save a full-memory `crash-<time>-<id>.dmp` minidump
+next to it). Attach both files when reporting a crash - they name the exact
+component that failed and make the fix possible.
 
 ## Continuous integration & releases
 
@@ -104,7 +107,7 @@ Cutting a release is therefore just:
 # bump "version" in src-tauri/tauri.conf.json (and keep package.json and
 # src-tauri/Cargo.toml in sync), add a CHANGELOG.md entry in plain language,
 # then:
-git add -A && git commit -m "chore(release): bump to 0.3.3" && git push
+git add -A && git commit -m "chore(release): bump to 0.3.4" && git push
 ```
 
 The workflow skips runs whose version was already released, so unrelated
@@ -143,9 +146,10 @@ Only one instance of the app runs per session: launching it again while it is
 in the tray just exits (two engines would fight over the same keyboards and
 controllers). If a game doesn't see a controller, the Dashboard's
 **"Not working?"** card has the fixes - the short version: Xbox pads never
-show in `joy.cpl` (check gamepad-tester.com instead), run the app as
-administrator if the driver is installed but no pad appears, and anti-cheat
-online modes (EA FC / FIFA, ranked fighters) block virtual controllers.
+show in `joy.cpl` (check gamepad-tester.com instead), and anti-cheat online
+modes (EA FC / FIFA, ranked fighters) block virtual controllers. The app
+already runs as administrator, so missing gamepads are no longer a
+permissions issue.
 
 ## Architecture
 
