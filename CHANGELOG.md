@@ -2,6 +2,20 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.7] - 2026-09-06
+
+### Fixed
+- Fixed a bug where the app crashed with a heap-corruption error
+  ("0xC0000374" at ntdll.dll) shortly after starting - sometimes instantly,
+  sometimes a minute or two in. The crash reports pointed at the webview's
+  GPU compositor, but the real cause was in keyboard detection: the buffer
+  that receives a keyboard's device name was sized in bytes, while Windows
+  measures and writes that name in characters. The name therefore overflowed
+  the buffer and silently corrupted memory on every launch; the crash was
+  just wherever the damage was noticed first. The buffer is now sized
+  correctly, which removes the corruption at the source (the software-
+  compositing workaround from 0.3.5 is harmless and stays).
+
 ## [0.3.6] - 2026-09-06
 
 ### Changed
