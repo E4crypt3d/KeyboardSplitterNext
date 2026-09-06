@@ -19,6 +19,27 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::io::AsRawHandle;
+#[cfg(target_os = "windows")]
+use windows::core::PCWSTR;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HANDLE, HMODULE};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Diagnostics::Debug::{
+    AddVectoredExceptionHandler, EXCEPTION_POINTERS, MiniDumpNormal, MiniDumpWriteDump,
+    MINIDUMP_EXCEPTION_INFORMATION,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::LibraryLoader::{
+    GetModuleFileNameW, GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::{
+    GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId,
+};
+
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, RunEvent, WindowEvent};
@@ -41,6 +62,118 @@ fn crash_log_dir() -> PathBuf {
         .join(IDENTIFIER)
 }
 
+/// Append one line to the latest crash log file. Shared by the panic hook
+/// and the Windows exception handler; must never panic itself (crash paths
+/// have to stay crash-proof).
+fn write_crash_log(line: &str) {
+    let dir = crash_log_dir();
+    // The data dir may not exist yet if the crash fired before setup.
+    let _ = fs::create_dir_all(&dir);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let path = dir.join(format!("crash-{stamp}-{}.log", std::process::id()));
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(file, "{line}");
+    }
+}
+
+/// Windows vectored exception handler: turns the bare "instruction at ...
+/// referenced memory at ..." dialog into a written record. A hard crash
+/// (access violation, stack overflow, ...) is not a Rust panic, so the panic
+/// hook alone leaves release builds silent - this writes a one-line report
+/// naming the faulting module (app.exe vs msedgewebview2.exe vs ntdll.dll)
+/// plus a full minidump next to it, so the next "inconsistent crash" is
+/// diagnosable from the user's machine.
+///
+/// Best-effort only: runs inside the exception dispatch, so every call is
+/// let-errored and the whole body is wrapped in catch_unwind - a fault in
+/// the handler itself must not take the process down a second time.
+#[cfg(target_os = "windows")]
+fn install_exception_handler() {
+    unsafe extern "system" fn handler(info: *mut EXCEPTION_POINTERS) -> i32 {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            write_exception_report(info);
+        }));
+        0 // EXCEPTION_CONTINUE_SEARCH: keep the default WER dialog too
+    }
+
+    unsafe {
+        let _ = AddVectoredExceptionHandler(1, Some(handler));
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn write_exception_report(info: *mut EXCEPTION_POINTERS) {
+    if info.is_null() {
+        return;
+    }
+    let record = &*(*info).ExceptionRecord;
+    let code = record.ExceptionCode.0 as u32;
+    let address = record.ExceptionAddress as usize;
+
+    let kind = match code {
+        // AV params: ExceptionInformation[0] = 0 read / 1 write / 8 execute,
+        // ExceptionInformation[1] = the faulting address.
+        0xC0000005 => {
+            let access = record.ExceptionInformation.first().copied().unwrap_or(0);
+            let target = record.ExceptionInformation.get(1).copied().unwrap_or(0);
+            match access {
+                1 => format!("access violation: write to {target:#018x}"),
+                8 => format!("access violation: execute of {target:#018x}"),
+                _ => format!("access violation: read of {target:#018x}"),
+            }
+        }
+        0xC00000FD => "stack overflow".to_string(),
+        0xC000001D => "illegal instruction".to_string(),
+        other => format!("unhandled exception {other:#010x}"),
+    };
+
+    // Name the DLL the faulting instruction lives in; the module handle
+    // doubles as its base address, so the offset is cheap to compute.
+    let module_line = {
+        let mut module = HMODULE::default();
+        let flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+            | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        if GetModuleHandleExW(flags, PCWSTR(address as *const u16), &mut module).is_ok() {
+            let mut name = [0u16; 512];
+            let len = GetModuleFileNameW(Some(module), &mut name);
+            let name = String::from_utf16_lossy(&name[..len as usize]);
+            format!("{name} (offset +{:#x})", address - module.0 as usize)
+        } else {
+            "<unknown>".to_string()
+        }
+    };
+    write_crash_log(&format!(
+        "{kind} at {address:#018x} (thread {}) in {module_line}",
+        GetCurrentThreadId()
+    ));
+
+    // Full minidump next to the log for offline debugging.
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let path = crash_log_dir().join(format!("crash-{stamp}-{}.dmp", std::process::id()));
+    if let Ok(file) = std::fs::File::create(&path) {
+        let exception = MINIDUMP_EXCEPTION_INFORMATION {
+            ThreadId: GetCurrentThreadId(),
+            ExceptionPointers: info,
+            ClientPointers: false.into(),
+        };
+        let _ = MiniDumpWriteDump(
+            GetCurrentProcess(),
+            GetCurrentProcessId(),
+            HANDLE(file.as_raw_handle()),
+            MiniDumpNormal,
+            Some(&exception),
+            None,
+            None,
+        );
+    }
+}
+
 /// Panic payload as a human readable string (Rust allows `&str` and `String`
 /// payloads; anything else is reported opaquely).
 fn panic_payload(info: &std::panic::PanicHookInfo<'_>) -> String {
@@ -54,6 +187,16 @@ fn panic_payload(info: &std::panic::PanicHookInfo<'_>) -> String {
     }
 }
 
+fn handle_panic(info: &std::panic::PanicHookInfo<'_>) {
+    let location = info
+        .location()
+        .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+        .unwrap_or_else(|| "<unknown>".to_string());
+    let message = panic_payload(info);
+    log::error!("PANIC at {location}: {message}");
+    write_crash_log(&format!("panic at {location}: {message}"));
+}
+
 /// Last-resort crash logging: release builds have no console (the log plugin
 /// only runs in debug), so a panic on any thread used to exit silently - the
 /// exact "app closes as soon as it opens" report that is impossible to
@@ -64,24 +207,7 @@ fn panic_payload(info: &std::panic::PanicHookInfo<'_>) -> String {
 fn install_panic_hook() {
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let location = info
-            .location()
-            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
-            .unwrap_or_else(|| "<unknown>".to_string());
-        let message = panic_payload(info);
-        log::error!("PANIC at {location}: {message}");
-
-        let dir = crash_log_dir();
-        // The data dir may not exist yet if the panic fired before setup.
-        let _ = fs::create_dir_all(&dir);
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let path = dir.join(format!("crash-{stamp}-{}.log", std::process::id()));
-        if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-            let _ = writeln!(file, "panic at {location}: {message}");
-        }
+        handle_panic(info);
         default_hook(info);
     }));
 }
@@ -94,7 +220,6 @@ fn install_panic_hook() {
 /// owning process dies, so a stale lock can never block a restart.
 #[cfg(target_os = "windows")]
 fn acquire_single_instance() -> bool {
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GetLastError};
     use windows::Win32::System::Threading::CreateMutexW;
 
@@ -131,6 +256,10 @@ fn acquire_single_instance() -> bool {
 pub fn run() {
     // Install before anything else so even early panics are diagnosable.
     install_panic_hook();
+    // Hard crashes (access violations etc.) are not Rust panics; this logs
+    // them with the faulting module and writes a minidump. Windows only.
+    #[cfg(target_os = "windows")]
+    install_exception_handler();
 
     // Only one engine may ever run per session (Windows is the only OS where
     // the app works at all, but the guard is cheap and explicit).
@@ -237,7 +366,12 @@ fn setup_tray(app: &App) -> tauri::Result<()> {
     let icon: Image = app
         .default_window_icon()
         .cloned()
-        .unwrap_or_else(|| Image::new_owned(vec![], 0, 0));
+        .unwrap_or_else(|| {
+            // Fallback only when the bundle carries no icon: a 0x0 empty
+            // image makes tray-icon build a null HICON; a single opaque
+            // pixel is a valid bitmap that can never fault.
+            Image::new_owned(vec![0x00, 0xFF, 0x00, 0xFF], 1, 1)
+        });
 
     let tray = TrayIconBuilder::with_id("keyboard-splitter-tray")
         .icon(icon)
