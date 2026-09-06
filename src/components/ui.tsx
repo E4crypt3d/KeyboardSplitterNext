@@ -1,4 +1,28 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, MouseEvent } from 'react'
+import { openExternal } from '../api'
+
+/** External link that opens in the system browser. A plain <a> does
+ *  nothing inside the Tauri webview (external navigation is blocked), so
+ *  clicks are routed through the opener plugin instead. */
+export function ExternalLink({
+  href,
+  children,
+  className = '',
+}: {
+  href: string
+  children: ReactNode
+  className?: string
+}) {
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault()
+    void openExternal(href)
+  }
+  return (
+    <a href={href} onClick={onClick} className={className}>
+      {children}
+    </a>
+  )
+}
 
 export function Button({
   children,

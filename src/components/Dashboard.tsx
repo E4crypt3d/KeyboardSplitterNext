@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as api from '../api'
 import type { Snapshot } from '../types'
 import { keyLabel, targetLabel } from '../types'
-import { Button, Card, SectionTitle, StatusDot } from './ui'
+import { Button, Card, ExternalLink, SectionTitle, StatusDot } from './ui'
 
 const VIGEM_URL = 'https://github.com/nefarius/ViGEmBus/releases'
 const TESTER_URL = 'https://gamepad-tester.com'
@@ -74,14 +74,22 @@ export default function Dashboard({
               </h3>
               <p className="mt-1 max-w-2xl text-sm text-zinc-400">{driver.message}</p>
             </div>
-            <a
-              href={VIGEM_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-500"
-            >
-              Download ViGEmBus driver
-            </a>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                disabled={busy}
+                title="Re-check whether the ViGEmBus driver is available now"
+                onClick={() => void run(api.probeDriver().then(() => api.snapshot()))}
+              >
+                ↻ Re-check driver
+              </Button>
+              <ExternalLink
+                href={VIGEM_URL}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-500"
+              >
+                Download ViGEmBus driver
+              </ExternalLink>
+            </div>
           </div>
           <ol className="mt-3 list-inside list-decimal space-y-1 text-xs text-zinc-500">
             <li>Download and run the ViGEmBus installer.</li>
@@ -361,14 +369,12 @@ export default function Dashboard({
             never show in the old <code className="text-zinc-400">joy.cpl</code> panel. While the
             engine runs, check the Windows game controller settings (Settings → Bluetooth &amp;
             devices → Game controllers) or{' '}
-            <a
+            <ExternalLink
               href={TESTER_URL}
-              target="_blank"
-              rel="noreferrer"
               className="text-emerald-400 underline-offset-2 hover:underline"
             >
               gamepad-tester.com
-            </a>{' '}
+            </ExternalLink>{' '}
             — press a bound key and watch it register. Enable <span className="text-zinc-300">Test
             mode</span> above for the same feedback right here.
           </li>

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   Binding,
   DriverStatus,
@@ -56,6 +57,10 @@ export const removePlayer = (player: number) =>
   invoke<Snapshot>('remove_player', { player })
 
 export const reconnectControllers = () => invoke<Snapshot>('reconnect_controllers')
+
+/** Open an external URL in the system browser (webview navigation is
+ *  blocked by default, so links go through the opener plugin). */
+export const openExternal = (url: string) => openUrl(url)
 
 export const saveProfile = (name: string) => invoke<Snapshot>('save_profile', { name })
 export const loadProfile = (name: string) => invoke<Snapshot>('load_profile', { name })

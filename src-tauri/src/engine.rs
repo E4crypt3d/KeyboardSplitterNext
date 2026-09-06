@@ -139,7 +139,16 @@ impl Core {
     fn new(data_dir: PathBuf) -> Core {
         let profiles_dir = data_dir.join("profiles");
         let _ = fs::create_dir_all(&profiles_dir);
-        let driver = probe_driver_status();
+        // Isolate the ViGEmBus probe: a half-installed or broken driver must
+        // never take the engine (and the whole app) down at startup - report
+        // it as missing so the UI shows the "driver not found" banner with
+        // the download link instead of crashing.
+        let driver = std::panic::catch_unwind(probe_driver_status).unwrap_or_else(|_| {
+            DriverStatus {
+                available: false,
+                message: "The ViGEmBus driver check failed unexpectedly - is the driver installed?".to_string(),
+            }
+        });
         let mut core = Core {
             running: false,
             driver,
@@ -423,17 +432,51 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
     // Windows-only: the capture thread will push DeviceList right away.
 
     for msg in rx {
-        let mut changed = false;
-        match msg {
-            EngineMsg::Shutdown => break,
-            EngineMsg::Snapshot(reply) => {
-                let _ = reply.send(Ok(core.snapshot()));
-            }
-            EngineMsg::ProbeDriver(reply) => {
-                core.driver = probe_driver_status();
-                let _ = reply.send(Ok(core.driver.clone()));
-            }
-            EngineMsg::SetRunning { running, reply } => {
+        if matches!(msg, EngineMsg::Shutdown) {
+            break;
+        }
+        // One bad message (a driver FFI hiccup, a malformed profile, ...)
+        // must not kill the engine thread: log the panic (it lands in the
+        // crash log via the panic hook) and keep serving the UI, so a
+        // missing ViGEmBus driver shows the banner instead of a dead app.
+        let changed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            handle_message(&app, &mut core, msg)
+        }))
+        .unwrap_or_else(|_| {
+            log::error!("engine: message handler panicked - recovered (details in crash log)");
+            false
+        });
+
+        if changed {
+            core.persist();
+            let _ = app.emit("engine:changed", ());
+        }
+    }
+
+    // Clean shutdown: unplug every virtual controller (drop runs disconnect).
+    for p in core.players.iter_mut() {
+        if let Some(mut c) = p.controller.take() {
+            c.disconnect();
+        }
+    }
+    log::info!("Engine stopped");
+}
+
+/// Handle one engine message; returns true when state changed and the
+/// profile should be persisted and the UI notified. Kept as a plain
+/// function so the message loop can run it behind `catch_unwind`.
+fn handle_message(app: &AppHandle, core: &mut Core, msg: EngineMsg) -> bool {
+    let mut changed = false;
+    match msg {
+        EngineMsg::Shutdown => unreachable!("the loop breaks on Shutdown before dispatch"),
+        EngineMsg::Snapshot(reply) => {
+            let _ = reply.send(Ok(core.snapshot()));
+        }
+        EngineMsg::ProbeDriver(reply) => {
+            core.driver = probe_driver_status();
+            let _ = reply.send(Ok(core.driver.clone()));
+        }
+        EngineMsg::SetRunning { running, reply } => {
                 core.running = running;
                 if running {
                     // Make sure every assigned player has a controller.
@@ -453,7 +496,7 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                         let _ = reply.send(Err(
                             "That keyboard is not connected anymore".to_string()
                         ));
-                        continue;
+                        return false;
                     }
                 }
                 if player < core.players.len() {
@@ -586,7 +629,7 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                 let path = core.profile_path(&name);
                 if !path.exists() {
                     let _ = reply.send(Err(format!("Profile '{name}' does not exist")));
-                    continue;
+                    return false;
                 }
                 for p in core.players.iter_mut() {
                     if let Some(mut c) = p.controller.take() {
@@ -606,7 +649,7 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                     let _ = reply.send(Err(
                         "Cannot delete the active profile".to_string()
                     ));
-                    continue;
+                    return false;
                 }
                 let path = core.profile_path(&name);
                 match fs::remove_file(&path) {
@@ -639,7 +682,7 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
             EngineMsg::ApplyPreset { player, preset_id, reply } => {
                 let Some(bindings) = presets::bindings(&preset_id) else {
                     let _ = reply.send(Err(format!("Unknown preset '{preset_id}'")));
-                    continue;
+                    return false;
                 };
                 if let Some(p) = core.players.get_mut(player) {
                     p.bindings = bindings;
@@ -658,13 +701,13 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                 let _ = reply.send(keys);
             }
             EngineMsg::KeyEvent { device, key, down } => {
-                handle_key_event(&app, &mut core, &device, &key, down);
+                handle_key_event(app, core, &device, &key, down);
             }
             EngineMsg::SetTapAssign { player, reply } => {
                 if let Some(p) = player {
                     if p >= core.players.len() {
                         let _ = reply.send(Err("No such player slot".to_string()));
-                        continue;
+                        return false;
                     }
                     // Assignment is a setup-time action: keys are only watched
                     // for it while the engine is paused. Refuse while running
@@ -673,7 +716,7 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                         let _ = reply.send(Err(
                             "Pause the engine before assigning keyboards".to_string()
                         ));
-                        continue;
+                        return false;
                     }
                 }
                 core.tap_assign = player;
@@ -706,21 +749,8 @@ fn run_engine(app: AppHandle, data_dir: PathBuf, rx: Receiver<EngineMsg>) {
                 core.reconcile_replugged_devices();
                 changed = true;
             }
-        }
-
-        if changed {
-            core.persist();
-            let _ = app.emit("engine:changed", ());
-        }
     }
-
-    // Clean shutdown: unplug every virtual controller (drop runs disconnect).
-    for p in core.players.iter_mut() {
-        if let Some(mut c) = p.controller.take() {
-            c.disconnect();
-        }
-    }
-    log::info!("Engine stopped");
+    changed
 }
 
 fn handle_key_event(app: &AppHandle, core: &mut Core, device: &str, key: &str, down: bool) {
