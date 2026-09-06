@@ -3,6 +3,7 @@
   "productName": "Keyboard Splitter",
   "version": "0.3.3",
   "identifier": "com.e4crypt3d.keyboardsplitter",
+  "mainBinaryName": "Keyboard Splitter",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",

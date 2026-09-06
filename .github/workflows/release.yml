@@ -114,7 +114,11 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.version }}"
           $productName = node -p "require('./src-tauri/tauri.conf.json').productName"
+          # tauri build renames the cargo binary to the product name
+          # (mainBinaryName in tauri.conf.json). Fall back to the cargo
+          # binary name in case that rename ever stops happening again.
           $exe = "src-tauri/target/release/$productName.exe"
+          if (-not (Test-Path $exe)) { $exe = "src-tauri/target/release/app.exe" }
           if (-not (Test-Path $exe)) { throw "portable exe not found: $exe" }
           $zip = "KeyboardSplitter-v$version-portable-win64.zip"
           Compress-Archive -Path "$exe" -DestinationPath $zip -Force
