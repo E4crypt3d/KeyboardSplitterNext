@@ -78,6 +78,14 @@ still required). CI packages it as a zip release asset automatically.
 
 Install that on each player's machine, then also install ViGEmBus once.
 
+## If the app crashes
+
+Release builds have no console, so every crash also writes a small report to
+`%APPDATA%\com.e4crypt3d.keyboardsplitter\crash-<time>-<id>.log` (hard
+crashes additionally save a full `crash-<time>-<id>.dmp` minidump next to
+it). Attach both files when reporting a crash - they name the exact component
+that failed and make the fix possible.
+
 ## Continuous integration & releases
 
 Two GitHub Actions workflows live in `.github/workflows/`:
@@ -96,7 +104,7 @@ Cutting a release is therefore just:
 # bump "version" in src-tauri/tauri.conf.json (and keep package.json and
 # src-tauri/Cargo.toml in sync), add a CHANGELOG.md entry in plain language,
 # then:
-git add -A && git commit -m "chore(release): bump to 0.3.2" && git push
+git add -A && git commit -m "chore(release): bump to 0.3.3" && git push
 ```
 
 The workflow skips runs whose version was already released, so unrelated

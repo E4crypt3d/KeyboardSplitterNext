@@ -2,6 +2,26 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.3] - 2026-09-06
+
+### Fixed
+- Fixed a bug where no keyboard input reached the app at all: a packet-size
+  check added in the previous release compared the buffer's length (which
+  stayed empty) instead of its actual size, so every key event was rejected
+  before it could be processed. Typing, "Assign by key" and live gameplay
+  all work again.
+- Fixed a bug where a hard crash (the "The instruction at ... referenced
+  memory at ..." Windows error) left no trace at all: every crash now also
+  writes a short report naming the faulty component, plus a full minidump,
+  to `%APPDATA%\com.e4crypt3d.keyboardsplitter\crash-<time>-<id>.log` /
+  `.dmp`, so the cause can actually be identified and fixed.
+- Fixed a bug where the tray icon could be created empty when the app icon
+  was missing - it now always uses a valid image.
+
+### Changed
+- **New app icon**: the split-keyboard logo with the two arrows is now used
+  everywhere - window, taskbar, system tray and installer.
+
 ## [0.3.2] - 2026-09-06
 
 ### Fixed
