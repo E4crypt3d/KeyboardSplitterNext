@@ -49,9 +49,15 @@ mod imp {
             if size == 0 || size > 1 << 16 {
                 return None;
             }
-            // First call reports the required size in bytes; ask again with a
-            // slightly larger buffer to be safe.
-            let mut buf = vec![0u16; (size as usize / 2) + 4];
+            // The size query returns the required buffer size in *WCHARs*
+            // (including the null terminator) on current Windows builds, not
+            // bytes as the docs claim, and the fill call writes the whole
+            // null-terminated name regardless of the size passed in. Allocate
+            // size+1 WCHARs so the buffer is large enough under every unit
+            // interpretation (bytes or WCHARs, with or without terminator) -
+            // undersizing here overflowed the heap on every startup and
+            // surfaced as random heap-corruption crashes.
+            let mut buf = vec![0u16; size as usize + 1];
             let mut buf_size = (buf.len() * 2) as u32;
             let ret = GetRawInputDeviceInfoW(
                 Some(handle),
