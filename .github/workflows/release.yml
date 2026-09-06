@@ -117,7 +117,7 @@ jobs:
           $exe = "src-tauri/target/release/$productName.exe"
           if (-not (Test-Path $exe)) { throw "portable exe not found: $exe" }
           $zip = "KeyboardSplitter-v$version-portable-win64.zip"
-          Compress-Archive -Path $exe -DestinationPath $zip -Force
+          Compress-Archive -Path "$exe" -DestinationPath $zip -Force
           gh release upload "v$version" $zip --clobber
           Write-Host "Attached $zip to release v$version"
 
