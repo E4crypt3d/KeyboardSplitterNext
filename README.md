@@ -107,7 +107,7 @@ Cutting a release is therefore just:
 # bump "version" in src-tauri/tauri.conf.json (and keep package.json and
 # src-tauri/Cargo.toml in sync), add a CHANGELOG.md entry in plain language,
 # then:
-git add -A && git commit -m "chore(release): bump to 0.3.4" && git push
+git add -A && git commit -m "chore(release): bump to 0.3.5" && git push
 ```
 
 The workflow skips runs whose version was already released, so unrelated

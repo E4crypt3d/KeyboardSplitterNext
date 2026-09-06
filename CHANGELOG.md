@@ -2,6 +2,16 @@
 
 All notable changes to Keyboard Splitter, explained in plain language.
 
+## [0.3.5] - 2026-09-06
+
+### Fixed
+- Fixed a bug where the app could crash at startup with a heap-corruption
+  error ("0xC0000374" / "0xC0000409" at ntdll.dll). The crash reports and
+  the full-memory dump traced the corruption to the webview's GPU
+  compositor while it draws the interface at startup. The webview now uses
+  software compositing, which avoids the corrupting code path entirely -
+  the interface looks and behaves the same.
+
 ## [0.3.4] - 2026-09-06
 
 ### Fixed
