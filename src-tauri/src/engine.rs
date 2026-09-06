@@ -53,8 +53,10 @@ pub enum EngineMsg {
     ApplyPreset { player: usize, preset_id: String, reply: Reply<Snapshot> },
     /// List built-in presets (id/name/description).
     ListPresets(Reply<Vec<PresetMeta>>),
-    /// Canonical key names bound by one built-in preset.
-    ListPresetKeys { preset_id: String, reply: Reply<Vec<String>> },
+    /// The full key -> target table of one built-in preset (the preset picker
+    /// compares these tables to tell presets apart, even when two layouts use
+    /// the same physical keys).
+    ListPresetBindings { preset_id: String, reply: Reply<Vec<Binding>> },
     /// A key was pressed/released on one physical keyboard.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     KeyEvent { device: String, key: String, down: bool },
@@ -695,10 +697,10 @@ fn handle_message(app: &AppHandle, core: &mut Core, msg: EngineMsg) -> bool {
             EngineMsg::ListPresets(reply) => {
                 let _ = reply.send(Ok(presets::list()));
             }
-            EngineMsg::ListPresetKeys { preset_id, reply } => {
-                let keys = presets::keys(&preset_id)
+            EngineMsg::ListPresetBindings { preset_id, reply } => {
+                let bindings = presets::bindings(&preset_id)
                     .ok_or_else(|| format!("Unknown preset '{preset_id}'"));
-                let _ = reply.send(keys);
+                let _ = reply.send(bindings);
             }
             EngineMsg::KeyEvent { device, key, down } => {
                 handle_key_event(app, core, &device, &key, down);

@@ -331,7 +331,7 @@ pub fn run() {
             commands::list_profiles,
             commands::apply_preset,
             commands::list_presets,
-            commands::list_preset_keys,
+            commands::list_preset_bindings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

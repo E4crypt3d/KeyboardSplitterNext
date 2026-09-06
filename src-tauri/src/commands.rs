@@ -160,11 +160,11 @@ pub async fn list_presets(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn list_preset_keys(
+pub async fn list_preset_bindings(
     engine: State<'_, EngineHandle>,
     preset_id: String,
-) -> Result<Vec<String>, String> {
-    ask(&engine, |reply| EngineMsg::ListPresetKeys { preset_id, reply }).await
+) -> Result<Vec<Binding>, String> {
+    ask(&engine, |reply| EngineMsg::ListPresetBindings { preset_id, reply }).await
 }
 
 #[tauri::command(rename_all = "camelCase")]

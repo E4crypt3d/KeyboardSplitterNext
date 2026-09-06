@@ -6,8 +6,10 @@
 //! one-keyboard splitters, where players had to use different zones).
 //!
 //! Controller-side layouts follow the games' documented Xbox defaults:
-//!   - EA Sports FC / FIFA:      A pass · X through ball · B cross · Y shoot
-//!   - eFootball / PES:          A low pass · X through ball · B shoot · Y lofted pass
+//!   - EA Sports FC / FIFA:      A pass · B shoot · X cross/lob · Y through (in-game "Classic")
+//!   - eFootball / PES:          A low pass · X shoot · B lofted/cross · Y through, dash on RB
+//!                               (Konami "Standard" - also the out-of-the-box PES 2017 layout;
+//!                               eFootball's "Alternate" scheme is the EA-style one above)
 //!   - Mortal Kombat 1/11:       X/Y/A/B = FP/BP/FK/BK · LB throw · RT block
 //!   - Tekken 7/8:               X/Y/A/B = LP/RP/LK/RK (combos are key chords)
 //!   - Street Fighter 6:         X/Y/RB = LP/MP/HP · A/B/RT = LK/MK/HK
@@ -85,22 +87,24 @@ const GENERAL_KEYS: &[(&str, Target)] = &[
     ("L", dpad(DpadDirection::Right)),
 ];
 
-/// Football: EA Sports FC / FIFA. Movement on the left stick, passing /
-/// shooting cluster on the left hand. Classic layout A pass · X through ·
-/// B cross · Y shoot; newer FC titles default shoot to Y - swap E/R if needed.
+/// Football: EA Sports FC / FIFA, in-game "Classic" scheme (the default).
+/// Movement on the left stick, passing/shooting cluster on the left hand:
+/// A pass · B shoot · X cross/lob · Y through ball. Dash/sprint is the right
+/// trigger (C). EA's in-game "Alternate" scheme (sprint on RB, shoot on X)
+/// matches the eFootball/PES Standard preset instead.
 const FOOTBALL_FC_KEYS: &[(&str, Target)] = &[
     ("W", stick(StickSide::Left, StickDirection::Up)),
     ("A", stick(StickSide::Left, StickDirection::Left)),
     ("S", stick(StickSide::Left, StickDirection::Down)),
     ("D", stick(StickSide::Left, StickDirection::Right)),
-    ("Space", b(GamepadButton::A)), // pass
+    ("Space", b(GamepadButton::A)), // pass / header
     ("E", b(GamepadButton::B)),     // shoot
-    ("Q", b(GamepadButton::X)),     // through ball
-    ("R", b(GamepadButton::Y)),     // cross / lob
+    ("Q", b(GamepadButton::X)),     // cross / lob pass
+    ("R", b(GamepadButton::Y)),     // through ball
     ("Tab", b(GamepadButton::LB)),  // change player
-    ("F", b(GamepadButton::RB)),    // sprint
-    ("LCtrl", trig(TriggerSide::Left)), // precision dribble / special
-    ("C", trig(TriggerSide::Right)),    // alternate sprint / dash
+    ("F", b(GamepadButton::RB)),    // teammate press / call for support (hold)
+    ("LCtrl", trig(TriggerSide::Left)), // shield / jockey (hold)
+    ("C", trig(TriggerSide::Right)),    // sprint / dash (hold)
     ("Up", dpad(DpadDirection::Up)),
     ("Left", dpad(DpadDirection::Left)),
     ("Down", dpad(DpadDirection::Down)),
@@ -108,21 +112,26 @@ const FOOTBALL_FC_KEYS: &[(&str, Target)] = &[
     ("Enter", b(GamepadButton::Start)), // pause
 ];
 
-/// Football: eFootball / PES. A low pass · X through ball · B shoot ·
-/// Y lofted pass, RT dash. Same ergonomic cluster as the FC preset.
+/// Football: eFootball / PES with the Konami "Standard" scheme that PES 2017,
+/// PES 2021 and eFootball ship out of the box (verified against the games'
+/// control charts/manuals): A low pass · X shoot · B lofted pass/cross ·
+/// Y through ball, dash on RB, specials on RT. Note the Xbox labels are
+/// positional - the PlayStation ▢/○/△ faces sit on Xbox X/B/Y. eFootball's
+/// in-game "Alternate" scheme is the EA-style one (shoot B, dash RT); use
+/// the EA FC preset for that feel.
 const FOOTBALL_PES_KEYS: &[(&str, Target)] = &[
     ("W", stick(StickSide::Left, StickDirection::Up)),
     ("A", stick(StickSide::Left, StickDirection::Left)),
     ("S", stick(StickSide::Left, StickDirection::Down)),
     ("D", stick(StickSide::Left, StickDirection::Right)),
-    ("Space", b(GamepadButton::A)), // low/short pass
-    ("E", b(GamepadButton::B)),     // shoot
-    ("Q", b(GamepadButton::X)),     // through ball
-    ("R", b(GamepadButton::Y)),     // lofted pass / cross
-    ("Tab", b(GamepadButton::LB)),  // change player / pressure
-    ("F", b(GamepadButton::RB)),    // match-up / second press
-    ("C", trig(TriggerSide::Right)),    // dash (sprint)
-    ("LCtrl", trig(TriggerSide::Left)), // dribbling modifier / manual
+    ("Space", b(GamepadButton::A)), // low/short pass (pressure when defending)
+    ("E", b(GamepadButton::X)),     // shoot (Xbox X = PlayStation ▢ position)
+    ("Q", b(GamepadButton::B)),     // lofted pass / cross
+    ("R", b(GamepadButton::Y)),     // through ball
+    ("Tab", b(GamepadButton::LB)),  // cursor change / change player
+    ("F", b(GamepadButton::RB)),    // dash / sprint (hold)
+    ("C", trig(TriggerSide::Right)),    // special controls / skill modifier (hold)
+    ("LCtrl", trig(TriggerSide::Left)), // manual controls (hold)
     ("Up", dpad(DpadDirection::Up)),
     ("Left", dpad(DpadDirection::Left)),
     ("Down", dpad(DpadDirection::Down)),
@@ -273,13 +282,13 @@ static PRESETS: &[PresetDef] = &[
     PresetDef {
         id: "football-fc",
         name: "Football (FIFA / EA FC)",
-        description: "Classic EA FC scheme: A pass, X through ball, B shoot, Y cross on Space/Q/E/R, sprint on F, player change on Tab. Newer FC titles default shoot to Y - swap E and R to taste.",
+        description: "EA FC defaults (in-game Classic scheme): pass Space, shoot E, cross Q, through R, sprint C (right trigger), teammate press F, change player Tab. Shooting feels wrong in PES? That game's default puts shoot on X - use the eFootball/PES preset instead.",
         keys: FOOTBALL_FC_KEYS,
     },
     PresetDef {
         id: "football-pes",
         name: "Football (eFootball / PES)",
-        description: "eFootball scheme: A low pass, X through ball, B shoot, Y lofted pass; dash on C, pressure on F. Kick-off at full speed.",
+        description: "PES/eFootball out-of-the-box layout (Konami Standard, same scheme as PES 2017): pass Space, shoot E, cross Q, through R, dash F (RB), specials C (RT), change player Tab. If eFootball is set to its Alternate scheme the buttons are EA-style - apply the EA FC preset instead.",
         keys: FOOTBALL_PES_KEYS,
     },
     PresetDef {
@@ -347,11 +356,6 @@ pub fn bindings(id: &str) -> Option<Vec<Binding>> {
         .map(|p| p.keys.iter().map(|(k, t)| Binding { key: k.to_string(), target: *t }).collect())
 }
 
-/// The canonical key names of a built-in preset, in display order. The UI
-/// sorts them itself; used to detect which preset a player's bindings match.
-pub fn keys(id: &str) -> Option<Vec<String>> {
-    bindings(id).map(|b| b.into_iter().map(|x| x.key).collect())
-}
 
 /// Default layout for new players == the "general" preset.
 pub fn default_bindings() -> Vec<Binding> {
@@ -390,12 +394,85 @@ mod tests {
     }
 
     #[test]
-    fn keys_mirror_the_preset_definitions() {
+    fn bindings_mirror_the_preset_definitions() {
         for def in PRESETS {
-            let expected: Vec<String> = def.keys.iter().map(|(k, _)| k.to_string()).collect();
-            assert_eq!(super::keys(def.id).as_ref(), Some(&expected), "preset {}", def.id);
+            let expected: Vec<Binding> = def
+                .keys
+                .iter()
+                .map(|(k, t)| Binding { key: k.to_string(), target: *t })
+                .collect();
+            assert_eq!(
+                super::bindings(def.id).as_ref(),
+                Some(&expected),
+                "preset {}",
+                def.id
+            );
         }
-        assert_eq!(super::keys("nope"), None);
+        assert_eq!(super::bindings("nope"), None);
+    }
+
+    #[test]
+    fn every_preset_has_a_distinct_key_target_table() {
+        // The preset picker identifies the preset a player is using by
+        // comparing (key → target) pairs, so two presets that bind the same
+        // keys to the same targets would be indistinguishable (this is what
+        // made the PES preset "snap back" to FIFA: they shared the same key
+        // list and the picker compared keys only). No two presets may share
+        // an identical table.
+        // Compare rows of "key|target" - Binding itself is not Hash (it is a
+        // serde DTO and stays that way), so fingerprint via Debug.
+        let mut seen: HashSet<Vec<String>> = HashSet::new();
+        for def in PRESETS {
+            let mut table: Vec<String> = def
+                .keys
+                .iter()
+                .map(|(k, t)| format!("{k}|{t:?}"))
+                .collect();
+            table.sort();
+            assert!(
+                seen.insert(table),
+                "preset '{}' has the exact same key->target table as another preset - the picker could not tell them apart",
+                def.id
+            );
+        }
+    }
+
+    #[test]
+    fn football_presets_follow_each_games_xbox_defaults() {
+        // Researched from the games' control charts / manuals:
+        //  - EA FC "Classic" (its default): A pass, B shoot, X cross/lob,
+        //    Y through ball, sprint on RT.
+        //  - eFootball/PES "Standard" (the Konami default, unchanged since
+        //    PES 2017): A low pass, X shoot, B lofted pass/cross, Y through
+        //    ball, dash on RB, specials on RT. Xbox labels are positional -
+        //    the PS ▢/○/△ faces map to Xbox X/B/Y.
+        let at = |bs: &[Binding], key: &str| {
+            bs.iter()
+                .find(|b| b.key == key)
+                .map(|b| b.target)
+                .unwrap_or_else(|| panic!("key {key} not bound"))
+        };
+
+        let fc = bindings("football-fc").unwrap();
+        assert_eq!(at(&fc, "E"), b(GamepadButton::B)); // shoot
+        assert_eq!(at(&fc, "Q"), b(GamepadButton::X)); // cross / lob
+        assert_eq!(at(&fc, "R"), b(GamepadButton::Y)); // through ball
+        assert_eq!(at(&fc, "C"), trig(TriggerSide::Right)); // sprint (RT)
+
+        let pes = bindings("football-pes").unwrap();
+        assert_eq!(at(&pes, "E"), b(GamepadButton::X)); // shoot (Konami Standard)
+        assert_eq!(at(&pes, "Q"), b(GamepadButton::B)); // lofted pass / cross
+        assert_eq!(at(&pes, "R"), b(GamepadButton::Y)); // through ball
+        assert_eq!(at(&pes, "F"), b(GamepadButton::RB)); // dash (RB)
+        assert_eq!(at(&pes, "C"), trig(TriggerSide::Right)); // specials (RT)
+
+        // Both keep the same ergonomic key cluster so switching games is
+        // seamless; only the Xbox targets follow each game's scheme.
+        let keys_of = |bs: &[Binding]| -> HashSet<String> {
+            bs.iter().map(|b| b.key.clone()).collect()
+        };
+        assert_eq!(keys_of(&fc), keys_of(&pes));
+        assert_ne!(bindings("football-fc").unwrap(), bindings("football-pes").unwrap());
     }
 
     #[test]

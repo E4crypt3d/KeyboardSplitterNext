@@ -42,9 +42,11 @@ export const resetDefault = (player: number) =>
 
 /** Built-in game presets (FIFA, MK, Tekken, ...). */
 export const listPresets = () => invoke<PresetMeta[]>('list_presets')
-/** Canonical key names bound by one built-in preset (display order). */
-export const listPresetKeys = (presetId: string) =>
-  invoke<string[]>('list_preset_keys', { presetId })
+/** Full key -> target table of one built-in preset (the picker needs the
+ *  targets, not just the keys, to tell presets with identical key layouts
+ *  apart - e.g. the two football presets). */
+export const listPresetBindings = (presetId: string) =>
+  invoke<Binding[]>('list_preset_bindings', { presetId })
 /** Replace one player's bindings with a built-in preset. */
 export const applyPreset = (player: number, presetId: string) =>
   invoke<Snapshot>('apply_preset', { player, presetId })
