@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Keyboard Splitter",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "identifier": "com.e4crypt3d.keyboardsplitter",
   "mainBinaryName": "Keyboard Splitter",
   "build": {

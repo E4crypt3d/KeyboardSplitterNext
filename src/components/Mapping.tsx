@@ -3,6 +3,7 @@ import * as api from '../api'
 import {
   keyLabel,
   targetLabel,
+  type Binding,
   type GamepadButton,
   type PresetMeta,
   type Snapshot,
@@ -38,28 +39,26 @@ export default function Mapping({
     playerRef.current = player
   })
 
-  // Sorted keys currently bound to this player.
-  const boundKeys = useMemo(() => {
-    return [...player.bindings].map((b) => b.key).sort()
-  }, [player.bindings])
+  // Canonical (key → target) tables of every built-in preset, fetched from
+  // the backend once the preset list arrives. Comparing full tables - not
+  // bare key lists - is what lets the picker tell presets apart when two
+  // layouts use the same physical keys (the football presets do on purpose).
+  const [presetTables, setPresetTables] = useState<Map<string, string>>(() => new Map())
 
-  // Canonical per-preset key lists, fetched from the backend once the preset
-  // list arrives. Only the ids are cached here, never the targets.
-  const [presetKeys, setPresetKeys] = useState<Map<string, string[]>>(() => new Map())
+  // Fingerprint of THIS player's current bindings (key → target pairs).
+  const playerTable = useMemo(() => bindingFingerprint(player.bindings), [player.bindings])
 
   // Which built-in preset (if any) currently matches this player's bindings.
-  // We compare the sorted key list against each preset so the picker shows
-  // the real current preset, not the last value selected in the dropdown.
+  // We compare the full key→target table against each preset so the picker
+  // shows the real current preset, not the last value selected in the dropdown.
   const appliedPreset = useMemo<PresetMeta | null>(() => {
-    if (!presets.length || !boundKeys.length) return null
+    if (!presets.length || !playerTable) return null
     for (const p of presets) {
-      const keys = presetKeys.get(p.id)
-      if (!keys) continue
-      if (keys.length !== boundKeys.length) continue
-      if (keys.join(',') === boundKeys.join(',')) return p
+      const table = presetTables.get(p.id)
+      if (table && table === playerTable) return p
     }
     return null
-  }, [presets, presetKeys, boundKeys])
+  }, [presets, presetTables, playerTable])
 
   // Built-in game presets (loaded once; the backend owns the definitions).
   useEffect(() => {
@@ -67,18 +66,18 @@ export default function Mapping({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Fetch the per-preset binding-key lists so the preset picker can compare
+  // Fetch the per-preset key→target tables so the preset picker can compare
   // them against the current player's bindings.
   useEffect(() => {
     if (!presets.length) return
     let cancelled = false
     void Promise.all(
       presets.map((p) =>
-        api.listPresetKeys(p.id).then((keys) => {
+        api.listPresetBindings(p.id).then((bindings) => {
           if (cancelled) return
-          setPresetKeys((prev) => {
+          setPresetTables((prev) => {
             const next = new Map(prev)
-            next.set(p.id, [...keys].sort())
+            next.set(p.id, bindingFingerprint(bindings))
             return next
           })
         }),
@@ -388,6 +387,16 @@ export default function Mapping({
 }
 
 // ---------------------------------------------------------------------------
+
+/** Canonical (key → target) fingerprint of a binding table. The picker needs
+ *  the targets, not just the keys: the EA FC and eFootball/PES presets share
+ *  the same key cluster on purpose and only differ in what each key does. */
+function bindingFingerprint(bindings: Binding[]): string {
+  return bindings
+    .map((b) => `${b.key}|${JSON.stringify(b.target)}`)
+    .sort()
+    .join('\n')
+}
 
 const BUTTONS: GamepadButton[] = [
   'A', 'B', 'X', 'Y', 'LB', 'RB', 'BACK', 'START', 'LTHUMB', 'RTHUMB',
