@@ -125,6 +125,25 @@ jobs:
           gh release upload "v$version" $zip --clobber
           Write-Host "Attached $zip to release v$version"
 
+      # Ship the PDB symbol files with every release: the crash handler writes
+      # minidumps, and WinDbg can only map a faulting offset (e.g.
+      # Keyboard_Splitter+0x28e3f9) back to a source file + line with the PDB
+      # from the exact same build. The profile.release `debug = true` setting
+      # in Cargo.toml makes these exist.
+      - name: Upload debug symbols
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $pdbs = Get-ChildItem "src-tauri/target/release/*.pdb" -ErrorAction SilentlyContinue
+          if (-not $pdbs) { Write-Warning "No PDB files found - skipping symbols upload"; exit 0 }
+          $zip = "KeyboardSplitter-v$version-symbols-win64.zip"
+          Compress-Archive -Path $pdbs.FullName -DestinationPath $zip -Force
+          gh release upload "v$version" $zip --clobber
+          Write-Host "Attached $zip ($($pdbs.Count) PDB files) to release v$version"
+
       - name: Show release URL
         if: steps.version.outputs.exists == 'false'
         shell: bash

@@ -12,6 +12,14 @@ rust-version = "1.77.2"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Release builds keep full debug info: the crash handler writes minidumps on
+# hard crashes, and WinDbg can only map faulting offsets (e.g.
+# `Keyboard_Splitter+0x28e3f9`) back to source lines with the matching PDB.
+# CI uploads the PDBs next to the installers for exactly this purpose.
+[profile.release]
+debug = true
+strip = false
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
