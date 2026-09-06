@@ -79,8 +79,13 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
     }
 
     BUF.with_borrow_mut(|buf| {
+        // resize, not reserve: GetRawInputData writes the packet into the
+        // buffer, and the bound check below compares against len(). reserve()
+        // only grows capacity while len() stays 0, which silently dropped
+        // every packet (regression in 0.3.1). resize() makes the length match
+        // the capacity so the check is real.
         if buf.capacity() < RAW_BUF_SIZE {
-            buf.reserve(RAW_BUF_SIZE);
+            buf.resize(RAW_BUF_SIZE, 0);
         }
         let mut size: u32 = RAW_BUF_SIZE as u32;
         let written = unsafe {
@@ -102,7 +107,7 @@ fn handle_raw_input(ctx: &CaptureCtx, lparam: LPARAM) {
         // truncated or malformed packet must never turn into an out-of-bounds
         // read (the reported `written` size is not fully trusted).
         let needed = size_of::<RAWINPUTHEADER>() + size_of::<RAWKEYBOARD>();
-        if (written as usize) < needed || buf.len() < needed {
+        if (written as usize) < needed || (written as usize) > buf.len() {
             return;
         }
         let input = unsafe { &*(buf.as_ptr() as *const RAWINPUT) };
